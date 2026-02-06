@@ -1,0 +1,48 @@
+{
+    "name": "xjtu tools",
+    "description": "an extentison convenient for xjtuers",
+    "version": "1.0",
+    "author": "le",
+    "manifest_version": 3,
+    "action": {
+        "default_icon": "icon.png"
+    },
+    "icons": {
+        "16": "icon.png",
+        "32": "icon.png",
+        "48": "icon.png",
+        "64": "icon.png"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "https://ehall.xjtu.edu.cn/jwapp/sys/cjcx/*default/*"
+            ],
+            "js": [
+                "scripts/checkGrades.js"
+            ],
+            "css": [
+                "checkGrades.css"
+            ],
+            "run_at": "document_end"
+        },
+        {
+            "matches": [
+                "https://ehall.xjtu.edu.cn/jwapp/sys/wspjyyapp/*default/*"
+            ],
+            "js": [
+                "scripts/teachingEvaluation.js"
+            ]
+        }
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "scripts/inject.js"
+            ],
+            "matches": [
+                "https://ehall.xjtu.edu.cn/*"
+            ]
+        }
+    ]
+}

@@ -1,0 +1,150 @@
+#wrapperdqxq-index-table .jqx-grid-column-header,
+#wrapperqb-index-table .jqx-grid-column-header {
+    cursor: default !important;
+    pointer-events: none !important;
+}
+
+.grade-helper-panel {
+    position: fixed;
+    right: 40px;
+    top: 120px;
+    width: 350px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    font-size: 14px;
+    z-index: 999999;
+    overflow: hidden;
+}
+
+.gh-header {
+    background: #d22e2e;
+    color: white;
+    padding: 10px;
+    font-weight: bold;
+    cursor: move;
+}
+
+.gh-content {
+    padding: 10px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.gh-group {
+    margin-bottom: 10px;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.gh-group-title {
+    background: #f9f9f9;
+    padding: 6px 8px;
+    cursor: pointer;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.gh-arrow {
+    color: #d22e2e;
+}
+
+.gh-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.gh-table th {
+    background: #fafafa;
+    padding: 6px;
+    text-align: center;
+}
+
+.gh-table td {
+    padding: 6px;
+    border-top: 1px solid #eee;
+    text-align: center;
+}
+
+.gh-footer {
+    margin-top: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.gh-footer-left {
+    font-weight: bold;
+    color: #c62828;
+}
+
+.gh-clear-btn {
+    border: 1px solid #e57373;
+    background: transparent;
+    color: #e57373;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.gh-clear-btn:hover {
+    background: #e57373;
+    color: white;
+}
+
+a:hover {
+    cursor: pointer;
+}
+
+/*面板震动动画 */
+@keyframes gh-shake {
+    0% {
+        transform: translateX(0);
+    }
+
+    20% {
+        transform: translateX(-4px);
+    }
+
+    40% {
+        transform: translateX(4px);
+    }
+
+    60% {
+        transform: translateX(-3px);
+    }
+
+    80% {
+        transform: translateX(3px);
+    }
+
+    100% {
+        transform: translateX(0);
+    }
+}
+
+.gh-shake {
+    animation: gh-shake 0.35s ease;
+}
+
+/*渐隐动画*/
+.gh-fade-out {
+    animation: gh-fade-out 0.25s ease forwards;
+}
+
+@keyframes gh-fade-out {
+    from {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    to {
+        opacity: 0;
+        transform: scale(0.96);
+    }
+}
