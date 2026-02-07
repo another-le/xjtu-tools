@@ -1,4 +1,4 @@
-# xjtu tools
+# xjtu-tools
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-brightgreen.svg)](https://developer.chrome.com/docs/extensions/)
@@ -8,8 +8,10 @@
 ## 功能特性
 
 - **核心功能1**：查询成绩详细构成信息。
+![列扩展](./presentations/列扩展.gif)
+![固定列](./presentations/固定列.gif)
 - **核心功能2**：计算平均成绩、平均绩点
-![演示](./presentation.gif)
+![计算成绩](./presentations/计算成绩.gif)
 - **核心功能3**：一键评教。
 - **核心功能4**：下载PDF资料。
 
