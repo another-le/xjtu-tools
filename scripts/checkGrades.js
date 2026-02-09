@@ -89,9 +89,16 @@ console.log("Content Script 注入成功！");
         select_all_btn.removeAttribute('bh-advanced-query-role')
         parent.appendChild(select_all_btn)
         select_all_btn.addEventListener('click', () => {
-            document.querySelectorAll(copy_parent_div + ' tbody input[id^=checkbox]').forEach((ele) => {
-                ele.click();
-            })
+            let all_checked = document.querySelectorAll(copy_parent_div + ' tbody input[id^=checkbox]:not(:checked)')
+            if (all_checked.length)
+                document.querySelectorAll(copy_parent_div + ' tbody input[id^=checkbox]:not(:checked)').forEach((ele) => {
+                    ele.click();
+                })
+            else {
+                document.querySelectorAll(copy_parent_div + ' tbody input[id^=checkbox]:checked').forEach((ele) => {
+                    ele.click();
+                })
+            }
         })
         function copy_butn_callback(e) {
             if (e.target.tagName === 'A') {
@@ -143,7 +150,12 @@ console.log("Content Script 注入成功！");
         header_columns.forEach((ele, index) => {
             current_width = parseInt(ele.style.width.match(/\d+/)[0]);
             if (!exclude_array.includes(index)) {
+                let span_ele = ele.querySelector('span');
                 ele.style.display = 'block';
+                if (span_ele.innerText.includes('SY') && !span_ele.innerText.includes('实验'))
+                    span_ele.innerText += '（实验成绩）'
+                if (span_ele.innerText.includes('QT') && !span_ele.innerText.includes('其他'))
+                    span_ele.innerText += `（其他成绩${span_ele.innerText.match(/\d+/)}）`
                 sum_width = sum_width + current_width;
             }
             else ele.style.display = 'none'
