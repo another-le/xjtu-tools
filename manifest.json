@@ -2,10 +2,20 @@
     "name": "xjtu tools",
     "description": "an extentison convenient for xjtuers",
     "version": "1.0",
+    "permissions": [
+        "cookies"
+    ],
+    "host_permissions": [
+        "https://*.xjtu.edu.cn/*",
+        "http://*.xjtu.edu.cn/*"
+    ],
     "author": "le",
     "manifest_version": 3,
     "action": {
         "default_icon": "icon.png"
+    },
+    "background": {
+        "service_worker": "scripts/background.js"
     },
     "icons": {
         "16": "icon.png",
@@ -32,6 +42,14 @@
             ],
             "js": [
                 "scripts/teachingEvaluation.js"
+            ]
+        },
+        {
+            "matches": [
+                "https://xkfw.xjtu.edu.cn/xsxkapp/sys/xsxkapp/*default/index.do"
+            ],
+            "js": [
+                "scripts/exit.js"
             ]
         }
     ],
