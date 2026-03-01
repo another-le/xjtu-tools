@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-brightgreen.svg)](https://developer.chrome.com/docs/extensions/)
 
-这是一个方便**XJTUers**的效率工具，可以在[西交本科教务官网](https://ehall.xjtu.edu.cn/new/index.html?browser=no)帮助你查询小分成绩、计算平均成绩（绩点）、一键评教以及在[学习平台](https://class.xjtu.edu.cn/user/courses#/?pageIndex=1)下载PDF等功能。
+这是一个方便**XJTUers**的效率工具，可以在[西交本科教务官网](https://ehall.xjtu.edu.cn/new/index.html?browser=no)帮助你查询小分成绩、计算平均成绩（绩点）、一键评教、方便选课平台登录以及在[学习平台](https://class.xjtu.edu.cn/user/courses#/?pageIndex=1)下载PDF等功能。
 
 ## 功能特性
 
@@ -14,6 +14,7 @@
 ![计算成绩](./presentations/计算成绩.gif)
 - **核心功能3**：一键评教。
 - **核心功能4**：下载PDF资料。
+- **核心功能5**：方便选课平台登录。
 
 ## 安装方法
 
