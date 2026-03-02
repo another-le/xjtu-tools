@@ -21,7 +21,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         console.log("Received download request for URL:", message.url);
         chrome.downloads.download({
             url: message.url,
-            filename: message.filename || 'document.pdf',
+            filename: message.fileName || 'document.pdf',
             saveAs: true  // true 会弹出保存对话框
         }, (downloadId) => {
             if (chrome.runtime.lastError) {

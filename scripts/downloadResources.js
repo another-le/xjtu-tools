@@ -11,6 +11,7 @@ function d_pdf(dom) {
     chrome.runtime.sendMessage({
         action: 'downloadPdf',
         url: pdfUrl,
+        fileName: document.querySelector('div.header span[tipsy="upload.name"]').title
     });
 }
 
