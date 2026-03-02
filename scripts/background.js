@@ -17,4 +17,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             });
         });
     }
+    else if (message.action === 'downloadPdf') {
+        console.log("Received download request for URL:", message.url);
+        chrome.downloads.download({
+            url: message.url,
+            filename: message.filename || 'document.pdf',
+            saveAs: true  // true 会弹出保存对话框
+        }, (downloadId) => {
+            if (chrome.runtime.lastError) {
+                console.error('下载失败:', chrome.runtime.lastError);
+            } else {
+                console.log('下载已开始，ID:', downloadId);
+            }
+        });
+    }
 });
