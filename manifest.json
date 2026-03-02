@@ -3,7 +3,8 @@
     "description": "an extentison convenient for xjtuers",
     "version": "1.0",
     "permissions": [
-        "cookies"
+        "cookies",
+        "downloads"
     ],
     "host_permissions": [
         "https://*.xjtu.edu.cn/*",
@@ -51,6 +52,15 @@
             "js": [
                 "scripts/exit.js"
             ]
+        },
+        {
+            "matches": [
+                "https://lms.xjtu.edu.cn/course/*/courseware*"
+            ],
+            "js": [
+                "scripts/downloadResources.js"
+            ],
+            "run_at": "document_end"
         }
     ],
     "web_accessible_resources": [
