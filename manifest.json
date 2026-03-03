@@ -55,7 +55,7 @@
         },
         {
             "matches": [
-                "https://lms.xjtu.edu.cn/course/*/courseware*"
+                "https://lms.xjtu.edu.cn/course/*/*"
             ],
             "js": [
                 "scripts/downloadResources.js"
