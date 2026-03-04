@@ -61,6 +61,16 @@
                 "scripts/downloadResources.js"
             ],
             "run_at": "document_end"
+        },
+        {
+            "matches": [
+                "https://xjtu.yuketang.cn/pro/lms/*"
+            ],
+            "js": [
+                "scripts/antiPause.js"
+            ],
+            "run_at": "document_start",
+            "all_frames": true
         }
     ],
     "web_accessible_resources": [
@@ -69,7 +79,8 @@
                 "scripts/inject.js"
             ],
             "matches": [
-                "https://ehall.xjtu.edu.cn/*"
+                "https://ehall.xjtu.edu.cn/*",
+                "https://xjtu.yuketang.cn/*"
             ]
         }
     ]
