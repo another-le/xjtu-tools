@@ -1,7 +1,6 @@
 # xjtu-tools
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-brightgreen.svg)](https://developer.chrome.com/docs/extensions/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)   [![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-brightgreen.svg)](https://developer.chrome.com/docs/extensions/)
 
 这是一个方便**XJTUers**的效率工具，可以在[西交本科教务官网](https://ehall.xjtu.edu.cn/new/index.html?browser=no)帮助你查询小分成绩、计算平均成绩（绩点）、一键评教、方便选课平台登录、形策平台视频可后台播放以及在[学习平台](https://lms.xjtu.edu.cn/user/index#/)下载学习资源等功能。
 
@@ -26,7 +25,7 @@
 > - 📝 请在下载后24小时内删除，如需长期保存请购买正版
 - **核心功能5**：方便选课平台登录。
 - **核心功能6**：形策平台视频可后台播放
-- 
+
 ## 安装方法
 
 由于未上架Chrome应用商店，请通过以下方式手动安装：
@@ -49,3 +48,15 @@
 git clone https://github.com/c-l-china/xjtu-tools.git
 cd xjtu-tools
 ```
+
+---
+## 更多类似项目推荐（不同平台）
+### 移动端 App
+- **仓库地址**：[xjtu-toolbox-android](https://github.com/yeliqin666/xjtu-toolbox-android)
+- **适用平台**：Android
+
+### 桌面端客户端
+- **仓库地址**：[XJTUToolBox](https://github.com/yan-xiaoo/XJTUToolBox)
+- **适用平台**：Windows/Mac/Linux
+  
+欢迎体验不同平台版本，也欢迎给两个项目点个 Star ✨
