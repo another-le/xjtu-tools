@@ -12,6 +12,7 @@
 - **核心功能2**：计算平均成绩、平均绩点
 ![计算成绩](./presentations/计算成绩.gif)
 - **核心功能3**：一键评教。
+![评教](./presentations/评教.gif)
 - **核心功能4**：下载学习资源。
 ![下载pdf](./presentations/下载资源.gif)
 

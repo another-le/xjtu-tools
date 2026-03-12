@@ -30,7 +30,7 @@ function waitForElement(selector, callback) {
         const el = document.querySelector(selector);
         if (el) {
             callback(el);
-            observer.disconnect(); // 找到后停止监听
+            // observer.disconnect(); // 找到后停止监听
         }
     });
 
@@ -42,11 +42,14 @@ function waitForElement(selector, callback) {
 }
 
 console.log("Content Script 注入成功！");
-waitForElement('#txwj-index-card>div', () => {
-    const container = document.querySelector('.jsfkxx')
+waitForElement('div.bh-paper-pile-dialog:nth-last-child(2)', () => {
+    const prev_elem = document.querySelector('#bhCollapsiblePanel')
+    const have_btn = document.querySelector('#teaching-evaluation-btn')
+    if (have_btn) return;
     const btn = document.createElement('button')
     btn.innerText = "一键评教"
-    container.appendChild(btn)
+    btn.id = 'teaching-evaluation-btn'
+    prev_elem.insertAdjacentElement('afterend', btn);
     btn.addEventListener('click', () => {
         teachingEvaluation();
     })
