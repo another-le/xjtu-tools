@@ -63,7 +63,7 @@ waitForElement('.file-previewer div.ng-scope[class*=container]', (parent_dom) =>
     let fileExtension = document.querySelector('div.header span[ng-bind="upload.name|fileExtension"]').innerText;
     let a = document.createElement('a');
     a.innerHTML = '下载';
-    if (!['.pdf', '.mp4', '.pptx'].includes(fileExtension)) return;
+    if (!['.pdf', '.mp4', '.pptx', '.docx'].includes(fileExtension)) return;
     if (fileExtension === '.pdf') {
         waitForElement('#pdf-viewer', (element) => {
             console.log('Angular 编译完成！');
@@ -83,7 +83,7 @@ waitForElement('.file-previewer div.ng-scope[class*=container]', (parent_dom) =>
             })
         })
     }
-    else if (fileExtension === '.pptx') {
+    else if (fileExtension === '.pptx' || fileExtension === '.docx') {
         waitForElement('#pdf-viewer', (element) => {
             //https://lms.xjtu.edu.cn/files/previewer/551481/1%E7%AC%AC%E4%B8%80%E7%AB%A0(%E7%AC%AC3%E8%8A%82).pptx#/
             let number = element.src.match(/id=(\d+)/)[1];
