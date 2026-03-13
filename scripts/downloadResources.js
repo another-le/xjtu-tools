@@ -16,9 +16,9 @@ function d_pdf(dom) {
 }
 
 
-function waitForElement(selector, callback, mode = null) {
+function waitForElement(selector, callback, mode = null, parent = document.body) {
     function isCompiled() {
-        const element = document.querySelector(selector);
+        const element = parent.querySelector(selector);
         if (!element) return false;
         let ngSrc;
         if (mode === 'pdf') {
@@ -31,7 +31,7 @@ function waitForElement(selector, callback, mode = null) {
 
     // 如果已经编译好了
     if (isCompiled()) {
-        callback(document.querySelector(selector));
+        callback(parent.querySelector(selector));
         return;
     }
 
@@ -39,18 +39,18 @@ function waitForElement(selector, callback, mode = null) {
     const observer = new MutationObserver(() => {
         if (isCompiled()) {
             observer.disconnect();
-            callback(document.querySelector(selector));
+            callback(parent.querySelector(selector));
         }
     });
     if (mode === 'pdf')
-        observer.observe(document.body, {
+        observer.observe(parent, {
             childList: true,
             subtree: true,
             attributes: true,
             attributeFilter: ['ng-src']  // 只监听 ng-src 属性变化
         });
     else {
-        observer.observe(document.body, {
+        observer.observe(parent, {
             childList: true,
             subtree: true,
         });
@@ -63,6 +63,7 @@ waitForElement('.file-previewer div.ng-scope[class*=container]', (parent_dom) =>
     let fileExtension = document.querySelector('div.header span[ng-bind="upload.name|fileExtension"]').innerText;
     let a = document.createElement('a');
     a.innerHTML = '下载';
+    if (!fileExtension.contains(['.pdf', '.mp4', '.pptx'])) return;
     if (fileExtension === '.pdf') {
         waitForElement('#pdf-viewer', (element) => {
             console.log('Angular 编译完成！');
@@ -81,6 +82,32 @@ waitForElement('.file-previewer div.ng-scope[class*=container]', (parent_dom) =>
                 window.open(videoSrc, '_blank');
             })
         })
+    }
+    else if (fileExtension === '.pptx') {
+        waitForElement('#pdf-viewer', (element) => {
+            //https://lms.xjtu.edu.cn/files/previewer/551481/1%E7%AC%AC%E4%B8%80%E7%AB%A0(%E7%AC%AC3%E8%8A%82).pptx#/
+            let number = element.src.match(/id=(\d+)/)[1];
+            let title = document.querySelector('span.title>span[original-title]').getAttribute('title');
+            let pptxUrl = `${window.location.origin}/files/previewer/${number}/${encodeURIComponent(title)}.pptx`;
+
+            // 创建隐藏iframe
+            let iframe = document.createElement("iframe");
+            iframe.style.display = "none";
+            iframe.src = pptxUrl;
+            document.body.appendChild(iframe);
+
+            iframe.onload = () => {
+                console.log("previewer页面已加载");
+                // 等待pdf-viewer出现
+                let doc = iframe.contentDocument || iframe.contentWindow.document;
+                waitForElement('#pdf-viewer', (element) => {
+                    console.log('Angular 编译完成！');
+                    a.addEventListener('click', () => d_pdf(element));
+                }, 'pdf', doc)
+            };
+        }, 'pdf')
+        document.querySelector('.file-preview-actions').appendChild(a);
+        return;
     }
     document.querySelector('.toolbar-buttons').appendChild(a);
 });
