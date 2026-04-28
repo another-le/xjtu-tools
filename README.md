@@ -46,7 +46,7 @@
 ### 开发者：从源码安装
 如果你想贡献代码或体验最新开发版：
 ```bash
-git clone https://github.com/c-l-china/xjtu-tools.git
+git clone https://github.com/another-le/xjtu-tools.git
 cd xjtu-tools
 ```
 
