@@ -394,6 +394,19 @@ console.log("Content Script 注入成功！");
     let exclude_array = [9];
     let selected_subjects = []
 
+    function convertSemester(str) {
+        // 中文数字映射
+        const map = {
+            '一': '1',
+            '二': '2',
+        };
+        // 正则匹配：四位年份 - 四位年份 + "学年" + 可选空格 + "第X学期"
+        const regex = /(\d{4})-(\d{4})\s*学年\s*第([一二])学期/;
+        return str.replace(regex, (match, year1, year2, semesterChinese) => {
+            return `${year1}-${year2}-${map[semesterChinese]}`;
+        });
+    }
+
     //添加方框
     function addCheckbox() {
         // 添加方框
@@ -405,20 +418,37 @@ console.log("Content Script 注入成功！");
                 checkbox.type = 'checkbox'
                 checkbox.style.position = 'absolute'
                 checkbox.style.left = '65px'
-                checkbox.id = 'checkbox' + ele.children[0].dataset.kch
-                checkbox.checked = selected_subjects.includes(ele.children[0].dataset.kch)
+                pannel_num ? checkbox.id = 'checkbox' + ele.children[0].dataset.kch : checkbox.id = 'checkbox' + ele.nextSibling.children[0].title
+                pannel_num ? checkbox.checked = selected_subjects.includes(ele.children[0].dataset.kch) : checkbox.checked = selected_subjects.includes(ele.nextSibling.children[0].title)
                 ele.addEventListener('change', (e) => {
                     let current_row_info = e.target.previousElementSibling
+                    let info = current_row_info.parentElement.parentElement.querySelectorAll('td>span');
                     // console.log(current_row_info)
                     if (e.target.checked) {
-                        addGradeRow(current_row_info.dataset.xnxqdm, current_row_info.dataset.kcm, current_row_info.dataset.xf, current_row_info.dataset.zcj, current_row_info.dataset.xfjd, current_row_info.dataset.kch)
-                        selected_subjects.push(current_row_info.dataset.kch)
+                        if (current_row_info.dataset.xnxqdm) {
+                            addGradeRow(current_row_info.dataset.xnxqdm, current_row_info.dataset.kcm, current_row_info.dataset.xf, current_row_info.dataset.zcj, current_row_info.dataset.xfjd, current_row_info.dataset.kch)
+                            selected_subjects.push(current_row_info.dataset.kch)
+                        } else {
+
+                            addGradeRow(convertSemester(info[0].title), info[2].title, info[7].title, info[10].parentElement.nextSibling.innerText, info[11].title, info[1].title);
+                            selected_subjects.push(info[1].title);
+                        }
                     }
                     else {
-                        const index = selected_subjects.indexOf(current_row_info.dataset.kch);
+                        let index;
+                        pannel_num ? index = selected_subjects.indexOf(current_row_info.dataset.kch) : index = selected_subjects.indexOf(info[1].title);
                         if (index !== -1) {
                             selected_subjects.splice(index, 1);
-                            document.querySelector(`.grade-helper-panel #${current_row_info.dataset.kch}`).remove()
+                            pannel_num ? document.querySelector(`.grade-helper-panel #${current_row_info.dataset.kch}`).remove() : document.querySelector(`.grade-helper-panel #${info[1].title}`).remove();
+                            // 如果这个学期下面没有课程了，就把这个学期的标题也删除了
+                            let group;
+                            if (pannel_num) group = document.querySelector(`.grade-helper-panel [data-year="${current_row_info.dataset.xnxqdm}"]`);
+                            else {
+                                group = document.querySelector(`.grade-helper-panel [data-year="${convertSemester(info[0].title)}"]`);
+                            }
+                            if (group.querySelector('tbody tr') === null) {
+                                group.remove();
+                            }
                             calculateAverage();
                         }
                     }
@@ -533,12 +563,11 @@ console.log("Content Script 注入成功！");
 
         return group;
     }
-
+    //插入一个成绩
     function addGradeRow(year, name, credit, score, gpa, kch) {
 
         const group = getOrCreateGroup(year);
         const tbody = group.querySelector('tbody');
-
         const tr = document.createElement('tr');
         tr.id = kch
         tr.innerHTML = `
@@ -557,6 +586,10 @@ console.log("Content Script 注入成功！");
                     selected_subjects.splice(index, 1);
                     // if (document.querySelector('#checkbox' + to_delete_ele.id))
                     document.querySelector('#checkbox' + to_delete_ele.id).checked = false;
+                    // 如果这个学期下面没有课程了，就把这个学期的标题也删除了
+                    if (group.querySelector('tbody tr') === null) {
+                        group.remove();
+                    }
                     calculateAverage();
                 }
             }
