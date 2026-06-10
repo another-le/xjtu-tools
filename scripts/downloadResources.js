@@ -132,7 +132,8 @@ function monitor() {
                 marginLeft: '10px'
             });
             // 如果a标签存在了，需要删除后再添加，不然会有多个下载按钮
-            let existingDownloadLink = document.querySelector('.file-preview-actions a[innerHTML="下载"]');
+            let existingDownloadLink = Array.from(document.querySelectorAll('.file-preview-actions a'))
+                .find(a => a.innerHTML === '下载' || a.textContent === '下载');
             if (existingDownloadLink) {
                 existingDownloadLink.remove();
             }
