@@ -4,7 +4,9 @@
     "version": "1.0",
     "permissions": [
         "cookies",
-        "downloads"
+        "downloads",
+        "notifications",
+        "storage"
     ],
     "host_permissions": [
         "https://*.xjtu.edu.cn/*",
@@ -71,6 +73,15 @@
             ],
             "run_at": "document_start",
             "all_frames": true
+        },
+        {
+            "matches": [
+                "https://xkfw.xjtu.edu.cn/xsxkapp/sys/xsxkapp/*default/*"
+            ],
+            "js": [
+                "scripts/watchCourse.js"
+            ],
+            "run_at": "document_end"
         }
     ],
     "web_accessible_resources": [
