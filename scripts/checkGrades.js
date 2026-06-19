@@ -412,7 +412,7 @@ console.log("Content Script 注入成功！");
         if (!score || !isNaN(parseFloat(score))) return null;
         const gpaNum = parseFloat(gpa);
         const hasNumericGpa = !isNaN(gpaNum);
-        const s = String(score).trim();
+        const s = String(score).trim().normalize('NFKC');
         const letterMap = {
             'A+': { score: 95, gpa: 4.3 }, 'A': { score: 90, gpa: 4.0 }, 'A-': { score: 85, gpa: 3.7 },
             'B+': { score: 81, gpa: 3.3 }, 'B': { score: 78, gpa: 3.0 }, 'B-': { score: 75, gpa: 2.7 },
@@ -436,6 +436,14 @@ console.log("Content Script 注入成功！");
                 checkbox.type = 'checkbox'
                 checkbox.style.position = 'absolute'
                 checkbox.style.left = '65px'
+                // 检查是否为缓考课程
+                const tr = ele.parentElement;
+                const isDeferred = tr && Array.from(tr.children).some(td => /缓考/.test(td.textContent));
+                if (isDeferred) {
+                    checkbox.disabled = true;
+                    checkbox.style.opacity = '0.35';
+                    checkbox.style.cursor = 'not-allowed';
+                }
                 pannel_num ? checkbox.id = 'checkbox' + ele.children[0].dataset.kch : checkbox.id = 'checkbox' + ele.nextSibling.children[0].title
                 pannel_num ? checkbox.checked = selected_subjects.includes(ele.children[0].dataset.kch) : checkbox.checked = selected_subjects.includes(ele.nextSibling.children[0].title)
                 ele.addEventListener('change', (e) => {
@@ -486,7 +494,7 @@ console.log("Content Script 注入成功！");
                             else {
                                 group = document.querySelector(`.grade-helper-panel [data-year="${convertSemester(info[0].title)}"]`);
                             }
-                            if (group.querySelector('tbody tr') === null) {
+                            if (group && !group.querySelector('tbody tr')) {
                                 group.remove();
                             }
                             calculateAverage();
@@ -541,16 +549,34 @@ console.log("Content Script 注入成功！");
 
         <div class="gh-content">
             <div class="gh-groups"></div>
+        </div>
 
-            <div class="gh-footer">
+        <div class="gh-footer">
                 <div class="gh-footer-left">
                     平均分：<span class="gh-average">0</span>
                     平均绩点：<span class="gpa-average">0.00</span>
                 </div>
 
+                <span class="gh-help-icon">ⓘ<div class="gh-help-tooltip" style="white-space:nowrap;">
+                    <div style="font-weight:bold;margin-bottom:4px;color:#fff;">等级制成绩转换规则</div>
+                    <div style="color:#fff;">A+→95(4.3)　A→90(4.0)　A-→85(3.7)</div>
+                    <div style="color:#fff;">B+→81(3.3)　B→78(3.0)　B-→75(2.7)</div>
+                    <div style="color:#fff;">C+→72(2.3)　C→68(2.0)　C-→64(1.7)</div>
+                    <div style="color:#fff;">D→60(1.3)　F→0(0)</div>
+                    <div style="margin-top:4px;color:#ccc;">等级制统一按最低分计算平均分</div>
+                </div></span>
+
+                <span class="gh-help-icon" style="margin-left:4px;">ⓘ<div class="gh-help-tooltip" style="white-space:normal;width:240px;text-align:left;">
+                    <b style="color:#fff;">成绩列括号说明</b><br>
+                    <span style="color:#fff;">显示 &quot;A (92)&quot;：</span><br>
+                    <span style="color:#ccc;">等级为 A，真实分数 92 分<br>括号内分数仅供参考</span><br>
+                    <span style="color:#fff;">显示 &quot;A&quot;：</span><br>
+                    <span style="color:#ccc;">仅有等级，无真实分数<br>由程序自动转换最低分计算</span><br>
+                    <span style="color:#ffa726;margin-top:4px;display:block;">计算均分时统一使用等级最低分</span>
+                </div></span>
+
                 <button class="gh-clear-btn">全部删除</button>
             </div>
-        </div>
     `;
         document.body.appendChild(panel);
         makePanelDraggable(panel);
@@ -571,6 +597,8 @@ console.log("Content Script 注入成功！");
         <div class="gh-group-title">
             <span class="gh-arrow">▼</span>
             ${year}
+            <span class="gh-semester-avg">均分:0  均绩:0.00</span>
+            <button class="gh-semester-del">删除学期</button>
         </div>
 
         <table class="gh-table">
@@ -593,12 +621,27 @@ console.log("Content Script 注入成功！");
         const title = group.querySelector('.gh-group-title');
         const table = group.querySelector('.gh-table');
         const arrow = group.querySelector('.gh-arrow');
+        const delBtn = group.querySelector('.gh-semester-del');
 
-        title.addEventListener('click', () => {
+        title.addEventListener('click', (e) => {
+            if (e.target.closest('.gh-semester-del')) return;
             const hidden = table.style.display === 'none';
-
             table.style.display = hidden ? '' : 'none';
             arrow.textContent = hidden ? '▼' : '▶';
+        });
+
+        // 学期删除
+        delBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const tbody = group.querySelector('tbody');
+            tbody.querySelectorAll('tr').forEach(tr => {
+                const kch = tr.id;
+                const idx = selected_subjects.indexOf(kch);
+                if (idx !== -1) selected_subjects.splice(idx, 1);
+                document.querySelectorAll(`[id="checkbox${kch}"]`).forEach(cb => cb.checked = false);
+            });
+            group.remove();
+            calculateAverage();
         });
 
         return group;
@@ -616,6 +659,7 @@ console.log("Content Script 注入成功！");
         const tbody = group.querySelector('tbody');
         const tr = document.createElement('tr');
         tr.id = kch
+        if (parseFloat(score) < 60) tr.className = 'gh-row-warning';
         tr.innerHTML = `
         <td>${name}</td>
         <td>${credit}</td>
@@ -630,8 +674,7 @@ console.log("Content Script 注入成功！");
                 const index = selected_subjects.indexOf(to_delete_ele.id);
                 if (index !== -1) {
                     selected_subjects.splice(index, 1);
-                    // if (document.querySelector('#checkbox' + to_delete_ele.id))
-                    document.querySelector('#checkbox' + to_delete_ele.id).checked = false;
+                    document.querySelectorAll(`[id="checkbox${to_delete_ele.id}"]`).forEach(cb => cb.checked = false);
                     // 如果这个学期下面没有课程了，就把这个学期的标题也删除了
                     if (group.querySelector('tbody tr') === null) {
                         group.remove();
@@ -643,6 +686,21 @@ console.log("Content Script 注入成功！");
         tbody.appendChild(tr);
 
         calculateAverage();
+    }
+
+    function updateSemesterStats(group) {
+        const rows = group.querySelectorAll('tbody tr');
+        let totalScore = 0, totalCredit = 0, totalGpa = 0;
+        rows.forEach(row => {
+            const credit = parseFloat(row.children[1].textContent) || 0;
+            totalScore += credit * (parseFloat(row.children[2].dataset.score) || 0);
+            totalGpa += credit * (parseFloat(row.children[3].textContent) || 0);
+            totalCredit += credit;
+        });
+        const avg = totalCredit ? (totalScore / totalCredit).toFixed(2) : '0';
+        const gpaAvg = totalCredit ? (totalGpa / totalCredit).toFixed(2) : '0.00';
+        const display = group.querySelector('.gh-semester-avg');
+        if (display) display.textContent = `均分:${avg}  均绩:${gpaAvg}`;
     }
 
     function calculateAverage() {
@@ -666,7 +724,9 @@ console.log("Content Script 注入成功！");
         const gpa_avg = totalCredit ? (totalGpa / totalCredit).toFixed(2) : 0;
 
         document.querySelector('.gh-average').textContent = avg;
-        document.querySelector('.gpa-average').textContent = gpa_avg
+        document.querySelector('.gpa-average').textContent = gpa_avg;
+
+        document.querySelectorAll('.gh-group').forEach(updateSemesterStats);
     }
 
     function makePanelDraggable(panel) {

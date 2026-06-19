@@ -14,7 +14,14 @@
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
     font-size: 14px;
     z-index: 999999;
-    overflow: hidden;
+}
+
+.gh-header {
+    border-radius: 10px 10px 0 0;
+}
+
+.gh-footer {
+    border-radius: 0 0 10px 10px;
 }
 
 .gh-header {
@@ -52,9 +59,33 @@
     color: #d22e2e;
 }
 
+.gh-semester-avg {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: normal;
+    color: #888;
+}
+
+.gh-semester-del {
+    border: 1px solid #e57373;
+    background: transparent;
+    color: #e57373;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 11px;
+    cursor: pointer;
+    line-height: 1.4;
+}
+
+.gh-semester-del:hover {
+    background: #e57373;
+    color: white;
+}
+
 .gh-table {
     width: 100%;
     border-collapse: collapse;
+    table-layout: fixed;
 }
 
 .gh-table th {
@@ -69,8 +100,39 @@
     text-align: center;
 }
 
+.gh-table th:nth-child(1),
+.gh-table td:nth-child(1) { width: 47%; }  /* 课程名 */
+
+.gh-table th:nth-child(2),
+.gh-table td:nth-child(2) { width: 13%; }  /* 学分 */
+
+.gh-table th:nth-child(3),
+.gh-table td:nth-child(3) { width: 14%; }  /* 成绩 */
+
+.gh-table th:nth-child(4),
+.gh-table td:nth-child(4) { width: 12%; }  /* 绩点 */
+
+.gh-table th:nth-child(5),
+.gh-table td:nth-child(5) { width: 14%; }  /* 操作 */
+
+.gh-table td:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.gh-row-warning {
+    background: #fff0f0;
+}
+
+.gh-row-warning td {
+    color: #c62828;
+    font-weight: bold;
+}
+
 .gh-footer {
     margin-top: 10px;
+    padding: 0 10px 10px;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -99,6 +161,41 @@
 
 a:hover {
     cursor: pointer;
+}
+
+.gh-help-icon {
+    position: relative;
+    cursor: pointer;
+    color: #c62828;
+    font-size: 15px;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+.gh-help-icon:hover {
+    color: #d22e2e;
+}
+
+.gh-help-icon .gh-help-tooltip {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: #fff;
+    font-size: 12px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    white-space: nowrap;
+    z-index: 1000;
+    line-height: 1.6;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    pointer-events: none;
+}
+
+.gh-help-icon:hover .gh-help-tooltip {
+    display: block;
 }
 
 /*面板震动动画 */
