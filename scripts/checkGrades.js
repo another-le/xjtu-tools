@@ -148,7 +148,7 @@ console.log("Content Script 注入成功！");
         let width_array = [];
         let sum_width = 0;
         header_columns.forEach((ele, index) => {
-            current_width = parseInt(ele.style.width.match(/\d+/)[0]);
+            let current_width = parseInt(ele.style.width.match(/\d+/)[0]);
             if (!exclude_array.includes(index)) {
                 let span_ele = ele.querySelector('span');
                 ele.style.display = 'block';
@@ -315,7 +315,7 @@ console.log("Content Script 注入成功！");
                     //如果两次切换的数字是一样的，就不用麻烦了;
                     // if (selected_rows === to_select_rows)
                     //     return;
-                    afterclick_info = calculateNewRange(selected_rows, to_select_rows, current_page_min_rows, current_page_max_rows, sum_rows);
+                    let afterclick_info = calculateNewRange(selected_rows, to_select_rows, current_page_min_rows, current_page_max_rows, sum_rows);
                     hooked = false;
                     //如果前后切换两次此页的记录不变，这时候他其实也是请求了，但是这时候不能走添加路线，也不走删除路线！是不用动横向的拖拉条的删除路线！
                     // if (afterclick_info.afterMin === current_page_min_rows && afterclick_info.afterMax === current_page_max_rows) {
@@ -407,6 +407,24 @@ console.log("Content Script 注入成功！");
         });
     }
 
+    //等级制成绩转换：将字母等级（A+, A, A-, B+, B, B-, C+, C, C-, D, F）转为百分制最低分数和绩点
+    function resolveGrade(score, gpa) {
+        if (!score || !isNaN(parseFloat(score))) return null;
+        const gpaNum = parseFloat(gpa);
+        const hasNumericGpa = !isNaN(gpaNum);
+        const s = String(score).trim();
+        const letterMap = {
+            'A+': { score: 95, gpa: 4.3 }, 'A': { score: 90, gpa: 4.0 }, 'A-': { score: 85, gpa: 3.7 },
+            'B+': { score: 81, gpa: 3.3 }, 'B': { score: 78, gpa: 3.0 }, 'B-': { score: 75, gpa: 2.7 },
+            'C+': { score: 72, gpa: 2.3 }, 'C': { score: 68, gpa: 2.0 }, 'C-': { score: 64, gpa: 1.7 },
+            'D': { score: 60, gpa: 1.3 }, 'F': { score: 0, gpa: 0 },
+        };
+        if (letterMap[s]) {
+            return { score: letterMap[s].score, gpa: hasNumericGpa ? gpaNum : letterMap[s].gpa };
+        }
+        return null;
+    }
+
     //添加方框
     function addCheckbox() {
         // 添加方框
@@ -426,11 +444,33 @@ console.log("Content Script 注入成功！");
                     // console.log(current_row_info)
                     if (e.target.checked) {
                         if (current_row_info.dataset.xnxqdm) {
-                            addGradeRow(current_row_info.dataset.xnxqdm, current_row_info.dataset.kcm, current_row_info.dataset.xf, current_row_info.dataset.zcj, current_row_info.dataset.xfjd, current_row_info.dataset.kch)
+                            let score = current_row_info.dataset.zcj;
+                            let displayGrade = null;
+                            // 等级制课程（有 djcjmc）：统一按等级最低分计算
+                            if (current_row_info.dataset.djcjmc) {
+                                if (score) {
+                                    // 有真实分数 → 显示"等级 (真实分数)"供参考
+                                    displayGrade = `${current_row_info.dataset.djcjmc} (${score})`;
+                                } else {
+                                    // 无真实分数 → 只显示等级
+                                    displayGrade = current_row_info.dataset.djcjmc;
+                                }
+                                score = current_row_info.dataset.djcjmc; // 传字母等级给 resolveGrade 转最低分
+                            }
+                            addGradeRow(current_row_info.dataset.xnxqdm, current_row_info.dataset.kcm, current_row_info.dataset.xf, score, current_row_info.dataset.xfjd, current_row_info.dataset.kch, displayGrade)
                             selected_subjects.push(current_row_info.dataset.kch)
                         } else {
-
-                            addGradeRow(convertSemester(info[0].title), info[2].title, info[7].title, info[10].parentElement.nextSibling.innerText, info[11].title, info[1].title);
+                            // dqxq面板数据来源（DOM结构）:
+                            //   info[10].title = 等级类型（如"等级制（2014级及以后）"）
+                            //   td[11]（无span，info[10]的nextSibling）= 成绩（字母等级如"A"或数字）
+                            //   info[11].title = 绩点（始终有数字值）
+                            let score = info[10].parentElement.nextSibling.innerText;
+                            let displayGrade = null;
+                            // 等级制且成绩是字母 → 转换后只显示等级
+                            if (/等级制/.test(info[10].title) && score && isNaN(parseFloat(score))) {
+                                displayGrade = score;
+                            }
+                            addGradeRow(convertSemester(info[0].title), info[2].title, info[7].title, score, info[11].title, info[1].title, displayGrade);
                             selected_subjects.push(info[1].title);
                         }
                     }
@@ -564,7 +604,13 @@ console.log("Content Script 注入成功！");
         return group;
     }
     //插入一个成绩
-    function addGradeRow(year, name, credit, score, gpa, kch) {
+    function addGradeRow(year, name, credit, score, gpa, kch, displayGrade) {
+        // 等级制成绩转换
+        const converted = resolveGrade(score, gpa);
+        if (converted) {
+            score = converted.score.toString();
+            gpa = converted.gpa.toString();
+        }
 
         const group = getOrCreateGroup(year);
         const tbody = group.querySelector('tbody');
@@ -573,7 +619,7 @@ console.log("Content Script 注入成功！");
         tr.innerHTML = `
         <td>${name}</td>
         <td>${credit}</td>
-        <td>${score}</td>
+        <td data-score="${score}">${displayGrade || score}</td>
         <td>${gpa}</td>
         <td><a>删除</a></td>
     `;
@@ -608,9 +654,9 @@ console.log("Content Script 注入成功！");
         let totalGpa = 0;
 
         rows.forEach(row => {
-            const credit = parseFloat(row.children[1].textContent);
-            const score = parseFloat(row.children[2].textContent);
-            const gpa = parseFloat(row.children[3].textContent);
+            const credit = parseFloat(row.children[1].textContent) || 0;
+            const score = parseFloat(row.children[2].dataset.score) || 0;
+            const gpa = parseFloat(row.children[3].textContent) || 0;
             totalScore += credit * score;
             totalGpa += credit * gpa;
             totalCredit += credit;
