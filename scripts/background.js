@@ -38,7 +38,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       saveAs: true
     }, (downloadId) => {
       if (chrome.runtime.lastError) {
-        console.error('下载失败:', chrome.runtime.lastError);
+        console.error('下载失败:', JSON.stringify(chrome.runtime.lastError));
       } else {
         console.log('下载已开始，ID:', downloadId);
       }

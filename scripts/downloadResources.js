@@ -1,18 +1,25 @@
 // 下载内容：严格遵守原版权方的使用条款，仅供个人学习和研究使用，不得用于商业用途。
 
-function d_pdf(dom) {
-    // 获取PDF链接
-    const pdfUrl = decodeURIComponent(
-        dom.getAttribute('ng-src')
-            .match(/(?<=file=).+\.pdf/)[0]
-    );
-    console.log('PDF URL:', pdfUrl);
-    // 发送消息给背景脚本，触发下载
-    chrome.runtime.sendMessage({
-        action: 'downloadPdf',
-        url: pdfUrl,
-        fileName: document.querySelector('div.header span[tipsy="upload.name"]').title
-    });
+function getUploadId(dom) {
+    // 从 iframe src 提取 upload_id（PPTX/PDF 用）
+    // src 格式: .../pdf-viewer?file=...&upload_id=551516&...
+    if (dom?.src?.includes('upload_id=')) {
+        return dom.src.match(/upload_id=(\d+)/)?.[1];
+    }
+    return null;
+}
+
+// 三种文件类型（PDF / PPTX&DOCX / MP4）统一下载方式：
+// 取 upload_id → 拼 /api/uploads/{id}/blob → <a download> 强制下载
+function downloadBlob(id, fileName) {
+    const url = `${window.location.origin}/api/uploads/${id}/blob`;
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }
 
 
@@ -79,68 +86,41 @@ function waitForElement(selector, callback, mode = null, parent = document.body)
 console.log("downloadResources Script 注入成功！");
 // .file-previewer div.ng-scope[class*=container]
 function monitor() {
+    // 全局去重：移除已有的下载按钮
+    document.querySelectorAll('.toolbar-buttons a, .file-preview-actions a').forEach(el => {
+        if (el.innerHTML === '下载' || el.textContent === '下载') el.remove();
+    });
+
     waitForElement('.file-previewer div.ng-scope[class*=container]', (parent_dom) => {
         let fileExtension = document.querySelector('div.header span[ng-bind="upload.name|fileExtension"]').innerText;
+        let fileName = document.querySelector('div.header span[tipsy="upload.name"]').title;
         let a = document.createElement('a');
         a.innerHTML = '下载';
         if (!['.pdf', '.mp4', '.pptx', '.docx'].includes(fileExtension)) return;
-        if (fileExtension === '.pdf') {
+
+        if (fileExtension === '.pdf' || fileExtension === '.pptx' || fileExtension === '.docx') {
             waitForElement('#pdf-viewer', (element) => {
-                console.log('Angular 编译完成！');
-                a.addEventListener('click', () => d_pdf(element));
+                let id = getUploadId(element);
+                if (!id) return;
+                a.addEventListener('click', () => downloadBlob(id, fileName));
+                if (fileExtension === '.pdf') {
+                    document.querySelector('.toolbar-buttons').appendChild(a);
+                } else {
+                    Object.assign(a.style, { lineHeight: '32px', marginLeft: '10px' });
+                    document.querySelector('.file-preview-actions').appendChild(a);
+                }
             }, 'pdf')
         }
         else if (fileExtension === '.mp4') {
-            waitForElement('.file-previewer div.ng-scope[class*=container] video', (element) => {
-                a.addEventListener('click', () => {
-                    let videoSrc = element.src
-                    if (videoSrc.startsWith('/')) {
-                        videoSrc = window.location.origin + videoSrc;
-                    }
-                    console.log('在新标签页打开:', videoSrc);
-                    // 直接在新标签页打开
-                    window.open(videoSrc, '_blank');
-                })
+            waitForElement('video[id^=undefined]', (video) => {
+                let src = video?.getAttribute('src') || video?.src || '';
+                let id = src.match(/\/api\/uploads\/video\/(\d+)/)?.[1];
+                if (!id) return;
+                a.addEventListener('click', () => downloadBlob(id, fileName));
+                Object.assign(a.style, { lineHeight: '32px', marginLeft: '10px' });
+                document.querySelector('.file-preview-actions').appendChild(a);
             })
         }
-        else if (fileExtension === '.pptx' || fileExtension === '.docx') {
-            waitForElement('#pdf-viewer', (element) => {
-                //https://lms.xjtu.edu.cn/files/previewer/551481/1%E7%AC%AC%E4%B8%80%E7%AB%A0(%E7%AC%AC3%E8%8A%82).pptx#/
-                let number = element.src.match(/id=(\d+)/)[1];
-                let title = document.querySelector('span.title>span[original-title]').getAttribute('title');
-                let pptxUrl = `${window.location.origin}/files/previewer/${number}/${encodeURIComponent(title)}.pptx`;
-
-                // 创建隐藏iframe
-                let iframe = document.createElement("iframe");
-                iframe.style.display = "none";
-                iframe.src = pptxUrl;
-                document.body.appendChild(iframe);
-
-                iframe.onload = () => {
-                    console.log("previewer页面已加载");
-                    // 等待pdf-viewer出现
-                    let doc = iframe.contentDocument || iframe.contentWindow.document;
-                    waitForElement('#pdf-viewer', (element) => {
-                        console.log('Angular 编译完成！');
-                        a.addEventListener('click', () => d_pdf(element));
-                    }, 'pdf', doc)
-                };
-            }, 'pdf')
-            // 设置a标签样式
-            Object.assign(a.style, {
-                lineHeight: '32px',
-                marginLeft: '10px'
-            });
-            // 如果a标签存在了，需要删除后再添加，不然会有多个下载按钮
-            let existingDownloadLink = Array.from(document.querySelectorAll('.file-preview-actions a'))
-                .find(a => a.innerHTML === '下载' || a.textContent === '下载');
-            if (existingDownloadLink) {
-                existingDownloadLink.remove();
-            }
-            document.querySelector('.file-preview-actions').appendChild(a);
-            return;
-        }
-        document.querySelector('.toolbar-buttons').appendChild(a);
     });
 }
 // 关闭方式是直接点击右上角的叉号，所以监听这个元素的属性<div class="reveal-modal-bg" style="display: block;"></div>
