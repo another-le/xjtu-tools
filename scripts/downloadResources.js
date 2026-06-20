@@ -11,8 +11,10 @@ function getUploadId(dom) {
 
 // 三种文件类型（PDF / PPTX&DOCX / MP4）统一下载方式：
 // 取 upload_id → 拼 /api/uploads/{id}/blob → <a download> 强制下载
-function downloadBlob(id, fileName) {
-    const url = `${window.location.origin}/api/uploads/${id}/blob`;
+// isReference=true 时走 /api/uploads/reference/{id}/blob（视频用）
+function downloadBlob(id, fileName, isReference = false) {
+    const path = isReference ? `/api/uploads/reference/${id}/blob` : `/api/uploads/${id}/blob`;
+    const url = `${window.location.origin}${path}`;
     const link = document.createElement('a');
     link.href = url;
     link.download = fileName;
@@ -113,12 +115,25 @@ function monitor() {
         }
         else if (fileExtension === '.mp4') {
             waitForElement('video[id^=undefined]', (video) => {
-                let src = video?.getAttribute('src') || video?.src || '';
-                let id = src.match(/\/api\/uploads\/video\/(\d+)/)?.[1];
-                if (!id) return;
-                a.addEventListener('click', () => downloadBlob(id, fileName));
-                Object.assign(a.style, { lineHeight: '32px', marginLeft: '10px' });
-                document.querySelector('.file-preview-actions').appendChild(a);
+                function setupDownload() {
+                    let src = video?.getAttribute('src') || video?.src || '';
+                    // 注意：不能直接用 /api/uploads/video/{id} 里的 id，
+                    // 那是视频流 ID，不是 upload_id。
+                    // upload_reference_id 才是真正指向原始文件的引用 ID。
+                    let refId = src.match(/upload_reference_id=(\d+)/)?.[1];
+                    if (!refId) return false;
+                    a.addEventListener('click', () => downloadBlob(refId, fileName, true));
+                    Object.assign(a.style, { lineHeight: '32px', marginLeft: '10px' });
+                    document.querySelector('.file-preview-actions').appendChild(a);
+                    return true;
+                }
+                // video 元素刚出现时 src 可能还没被 Video.js 设置，
+                // 等 src 属性变化后再创建下载按钮
+                if (!setupDownload()) {
+                    new MutationObserver((_, obs) => {
+                        if (setupDownload()) obs.disconnect();
+                    }).observe(video, { attributes: true, attributeFilter: ['src'] });
+                }
             })
         }
     });
