@@ -393,6 +393,111 @@ console.log("Content Script 注入成功！");
     let pager = "#pagerdqxq-index-table"
     let exclude_array = [9];
     let selected_subjects = []
+    let draggedSemesterGroup = null;
+
+    const GRADE_SETTINGS_STORAGE_KEY = 'gradeHelperSettings';
+    const DEFAULT_GRADE_SETTINGS = {
+        rules: [
+            { grade: 'A+', score: 95, gpa: 4.3 },
+            { grade: 'A', score: 90, gpa: 4.0 },
+            { grade: 'A-', score: 85, gpa: 3.7 },
+            { grade: 'B+', score: 81, gpa: 3.3 },
+            { grade: 'B', score: 78, gpa: 3.0 },
+            { grade: 'B-', score: 75, gpa: 2.7 },
+            { grade: 'C+', score: 72, gpa: 2.3 },
+            { grade: 'C', score: 68, gpa: 2.0 },
+            { grade: 'C-', score: 64, gpa: 1.7 },
+            { grade: 'D', score: 60, gpa: 1.3 },
+            { grade: 'F', score: 0, gpa: 0 },
+        ],
+        averageMode: 'credit-weighted',
+        decimalPlaces: 2,
+        passingScore: 60,
+    };
+    let gradeSettings = cloneDefaultGradeSettings();
+
+    function cloneDefaultGradeSettings() {
+        return {
+            ...DEFAULT_GRADE_SETTINGS,
+            rules: DEFAULT_GRADE_SETTINGS.rules.map(rule => ({ ...rule })),
+        };
+    }
+
+    function normalizeGradeName(value) {
+        return String(value || '').trim().normalize('NFKC').toUpperCase();
+    }
+
+    function isNumericScore(value) {
+        const normalized = String(value ?? '').trim().normalize('NFKC');
+        return normalized !== '' && Number.isFinite(Number(normalized));
+    }
+
+    function sanitizeGradeSettings(value) {
+        if (!value || !Array.isArray(value.rules)) return cloneDefaultGradeSettings();
+
+        const seen = new Set();
+        const rules = value.rules.reduce((result, rule) => {
+            const grade = normalizeGradeName(rule?.grade);
+            const score = Number(rule?.score);
+            const gpa = Number(rule?.gpa);
+            if (!grade || isNumericScore(grade) || seen.has(grade) || !Number.isFinite(score) || score < 0 || score > 100 ||
+                !Number.isFinite(gpa) || gpa < 0 || gpa > 10) return result;
+            seen.add(grade);
+            result.push({ grade, score, gpa });
+            return result;
+        }, []);
+
+        if (!rules.length) return cloneDefaultGradeSettings();
+        const decimalPlaces = Number.parseInt(value.decimalPlaces, 10);
+        const passingScore = Number(value.passingScore);
+        return {
+            rules,
+            averageMode: value.averageMode === 'arithmetic' ? 'arithmetic' : 'credit-weighted',
+            decimalPlaces: Number.isInteger(decimalPlaces) && decimalPlaces >= 0 && decimalPlaces <= 4
+                ? decimalPlaces
+                : DEFAULT_GRADE_SETTINGS.decimalPlaces,
+            passingScore: Number.isFinite(passingScore) && passingScore >= 0 && passingScore <= 100
+                ? passingScore
+                : DEFAULT_GRADE_SETTINGS.passingScore,
+        };
+    }
+
+    function loadGradeSettings() {
+        return new Promise(resolve => {
+            if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+                resolve();
+                return;
+            }
+            try {
+                chrome.storage.local.get(GRADE_SETTINGS_STORAGE_KEY, result => {
+                    if (!chrome.runtime.lastError && result?.[GRADE_SETTINGS_STORAGE_KEY]) {
+                        gradeSettings = sanitizeGradeSettings(result[GRADE_SETTINGS_STORAGE_KEY]);
+                    }
+                    resolve();
+                });
+            } catch (error) {
+                console.warn('读取成绩统计设置失败，将使用默认设置。', error);
+                resolve();
+            }
+        });
+    }
+
+    function persistGradeSettings(settings) {
+        return new Promise(resolve => {
+            if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+                resolve(false);
+                return;
+            }
+            try {
+                chrome.storage.local.set({ [GRADE_SETTINGS_STORAGE_KEY]: settings }, () => {
+                    resolve(!chrome.runtime.lastError);
+                });
+            } catch (error) {
+                console.warn('保存成绩统计设置失败。', error);
+                resolve(false);
+            }
+        });
+    }
 
     function convertSemester(str) {
         // 中文数字映射
@@ -407,22 +512,12 @@ console.log("Content Script 注入成功！");
         });
     }
 
-    //等级制成绩转换：将字母等级（A+, A, A-, B+, B, B-, C+, C, C-, D, F）转为百分制最低分数和绩点
-    function resolveGrade(score, gpa) {
-        if (!score || !isNaN(parseFloat(score))) return null;
-        const gpaNum = parseFloat(gpa);
-        const hasNumericGpa = !isNaN(gpaNum);
-        const s = String(score).trim().normalize('NFKC');
-        const letterMap = {
-            'A+': { score: 95, gpa: 4.3 }, 'A': { score: 90, gpa: 4.0 }, 'A-': { score: 85, gpa: 3.7 },
-            'B+': { score: 81, gpa: 3.3 }, 'B': { score: 78, gpa: 3.0 }, 'B-': { score: 75, gpa: 2.7 },
-            'C+': { score: 72, gpa: 2.3 }, 'C': { score: 68, gpa: 2.0 }, 'C-': { score: 64, gpa: 1.7 },
-            'D': { score: 60, gpa: 1.3 }, 'F': { score: 0, gpa: 0 },
-        };
-        if (letterMap[s]) {
-            return { score: letterMap[s].score, gpa: hasNumericGpa ? gpaNum : letterMap[s].gpa };
-        }
-        return null;
+    //等级制成绩转换：使用用户在成绩统计设置中维护的规则
+    function resolveGrade(score) {
+        if (!score || isNumericScore(score)) return null;
+        const grade = normalizeGradeName(score);
+        const rule = gradeSettings.rules.find(item => item.grade === grade);
+        return rule ? { score: rule.score, gpa: rule.gpa, grade } : null;
     }
 
     //添加方框
@@ -454,7 +549,7 @@ console.log("Content Script 注入成功！");
                         if (current_row_info.dataset.xnxqdm) {
                             let score = current_row_info.dataset.zcj;
                             let displayGrade = null;
-                            // 等级制课程（有 djcjmc）：统一按等级最低分计算
+                            // 等级制课程（有 djcjmc）：统一按用户配置的规则换算
                             if (current_row_info.dataset.djcjmc) {
                                 if (score) {
                                     // 有真实分数 → 显示"等级 (真实分数)"供参考
@@ -463,7 +558,7 @@ console.log("Content Script 注入成功！");
                                     // 无真实分数 → 只显示等级
                                     displayGrade = current_row_info.dataset.djcjmc;
                                 }
-                                score = current_row_info.dataset.djcjmc; // 传字母等级给 resolveGrade 转最低分
+                                score = current_row_info.dataset.djcjmc; // 传字母等级给 resolveGrade 查找当前换算规则
                             }
                             addGradeRow(current_row_info.dataset.xnxqdm, current_row_info.dataset.kcm, current_row_info.dataset.xf, score, current_row_info.dataset.xfjd, current_row_info.dataset.kch, displayGrade)
                             selected_subjects.push(current_row_info.dataset.kch)
@@ -545,41 +640,301 @@ console.log("Content Script 注入成功！");
         const panel = document.createElement('div');
         panel.className = 'grade-helper-panel';
         panel.innerHTML = `
-         <div class="gh-header">成绩统计</div>
+        <div class="gh-header">
+            <span class="gh-header-title">成绩统计</span>
+            <button type="button" class="gh-settings-btn" aria-label="打开成绩统计设置" aria-expanded="false" title="成绩统计设置">⚙</button>
+        </div>
 
         <div class="gh-content">
             <div class="gh-groups"></div>
         </div>
 
         <div class="gh-footer">
-                <div class="gh-footer-left">
-                    平均分：<span class="gh-average">0</span>
-                    平均绩点：<span class="gpa-average">0.00</span>
-                </div>
+            <div class="gh-footer-left">
+                平均分：<span class="gh-average">0.00</span>
+                平均绩点：<span class="gpa-average">0.00</span>
+            </div>
 
-                <span class="gh-help-icon">ⓘ<div class="gh-help-tooltip" style="white-space:nowrap;">
-                    <div style="font-weight:bold;margin-bottom:4px;color:#fff;">等级制成绩转换规则</div>
-                    <div style="color:#fff;">A+→95(4.3)　A→90(4.0)　A-→85(3.7)</div>
-                    <div style="color:#fff;">B+→81(3.3)　B→78(3.0)　B-→75(2.7)</div>
-                    <div style="color:#fff;">C+→72(2.3)　C→68(2.0)　C-→64(1.7)</div>
-                    <div style="color:#fff;">D→60(1.3)　F→0(0)</div>
-                    <div style="margin-top:4px;color:#ccc;">等级制统一按最低分计算平均分</div>
+            <div class="gh-footer-actions">
+                <span class="gh-help-icon">ⓘ<div class="gh-help-tooltip gh-rule-tooltip">
+                    <div class="gh-tooltip-title">当前等级换算规则</div>
+                    <div class="gh-rule-summary"></div>
+                    <div class="gh-calculation-summary"></div>
+                    <div class="gh-tooltip-note">点击标题栏齿轮可修改</div>
                 </div></span>
 
-                <span class="gh-help-icon" style="margin-left:4px;">ⓘ<div class="gh-help-tooltip" style="white-space:normal;width:240px;text-align:left;">
+                <span class="gh-help-icon">ⓘ<div class="gh-help-tooltip gh-grade-help-tooltip">
                     <b style="color:#fff;">成绩列括号说明</b><br>
                     <span style="color:#fff;">显示 &quot;A (92)&quot;：</span><br>
                     <span style="color:#ccc;">等级为 A，真实分数 92 分<br>括号内分数仅供参考</span><br>
                     <span style="color:#fff;">显示 &quot;A&quot;：</span><br>
-                    <span style="color:#ccc;">仅有等级，无真实分数<br>由程序自动转换最低分计算</span><br>
-                    <span style="color:#ffa726;margin-top:4px;display:block;">计算均分时统一使用等级最低分</span>
+                    <span style="color:#ccc;">仅有等级，无真实分数<br>使用设置中的换算分数计算</span>
                 </div></span>
 
                 <button class="gh-clear-btn">全部删除</button>
             </div>
+        </div>
+
+        <div class="gh-settings-overlay" hidden>
+            <section class="gh-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="gh-settings-title">
+                <div class="gh-settings-heading">
+                    <div>
+                        <h2 id="gh-settings-title">成绩统计设置</h2>
+                        <p>自定义等级换算与平均值算法</p>
+                    </div>
+                    <button type="button" class="gh-settings-close" aria-label="关闭设置">×</button>
+                </div>
+
+                <div class="gh-settings-body">
+                    <div class="gh-settings-section">
+                        <div class="gh-settings-section-title">
+                            <span>等级换算</span>
+                            <button type="button" class="gh-add-rule-btn">＋ 添加等级</button>
+                        </div>
+                        <div class="gh-rule-table-wrap">
+                            <table class="gh-rule-table">
+                                <thead><tr><th>等级</th><th>换算分数</th><th>绩点</th><th></th></tr></thead>
+                                <tbody class="gh-rule-editor"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="gh-settings-section gh-calculation-settings">
+                        <div class="gh-settings-section-title"><span>平均值计算</span></div>
+                        <label>
+                            <span>计算方式</span>
+                            <select class="gh-average-mode">
+                                <option value="credit-weighted">按学分加权</option>
+                                <option value="arithmetic">课程算术平均</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span>保留小数位</span>
+                            <input class="gh-decimal-places" type="number" min="0" max="4" step="1">
+                        </label>
+                        <label>
+                            <span>及格分数线</span>
+                            <input class="gh-passing-score" type="number" min="0" max="100" step="0.1">
+                        </label>
+                    </div>
+                    <p class="gh-settings-status" role="status" aria-live="polite"></p>
+                </div>
+
+                <div class="gh-settings-footer">
+                    <button type="button" class="gh-reset-settings-btn">恢复默认</button>
+                    <div>
+                        <button type="button" class="gh-cancel-settings-btn">取消</button>
+                        <button type="button" class="gh-save-settings-btn">保存并重算</button>
+                    </div>
+                </div>
+            </section>
+        </div>
     `;
         document.body.appendChild(panel);
         makePanelDraggable(panel);
+        renderRuleSummary();
+        bindGradeSettings();
+    }
+
+    function formatRuleNumber(value) {
+        return String(Number(value));
+    }
+
+    function renderRuleSummary() {
+        const summary = document.querySelector('.gh-rule-summary');
+        if (!summary) return;
+        summary.replaceChildren();
+        gradeSettings.rules.forEach(rule => {
+            const item = document.createElement('div');
+            item.textContent = `${rule.grade} → ${formatRuleNumber(rule.score)}（${formatRuleNumber(rule.gpa)}）`;
+            summary.appendChild(item);
+        });
+        const calculationSummary = document.querySelector('.gh-calculation-summary');
+        if (calculationSummary) {
+            const mode = gradeSettings.averageMode === 'arithmetic' ? '课程算术平均' : '按学分加权';
+            calculationSummary.textContent = `${mode} · 保留 ${gradeSettings.decimalPlaces} 位小数`;
+        }
+    }
+
+    function createRuleEditorRow(rule) {
+        const row = document.createElement('tr');
+        row.className = 'gh-rule-row';
+
+        const fields = [
+            { name: 'grade', type: 'text', value: rule.grade ?? '', label: '等级名称' },
+            { name: 'score', type: 'number', value: rule.score ?? '', label: '换算分数', min: 0, max: 100, step: 0.1 },
+            { name: 'gpa', type: 'number', value: rule.gpa ?? '', label: '绩点', min: 0, max: 10, step: 0.01 },
+        ];
+
+        fields.forEach(field => {
+            const cell = document.createElement('td');
+            const input = document.createElement('input');
+            input.className = `gh-rule-${field.name}`;
+            input.type = field.type;
+            input.value = field.value;
+            input.setAttribute('aria-label', field.label);
+            if (field.min !== undefined) input.min = field.min;
+            if (field.max !== undefined) input.max = field.max;
+            if (field.step !== undefined) input.step = field.step;
+            cell.appendChild(input);
+            row.appendChild(cell);
+        });
+
+        const actionCell = document.createElement('td');
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.className = 'gh-remove-rule-btn';
+        removeButton.textContent = '×';
+        removeButton.setAttribute('aria-label', `删除等级 ${rule.grade || ''}`);
+        removeButton.addEventListener('click', () => row.remove());
+        actionCell.appendChild(removeButton);
+        row.appendChild(actionCell);
+        return row;
+    }
+
+    function renderSettingsEditor(settings) {
+        const editor = document.querySelector('.gh-rule-editor');
+        if (!editor) return;
+        editor.replaceChildren(...settings.rules.map(createRuleEditorRow));
+        document.querySelector('.gh-average-mode').value = settings.averageMode;
+        document.querySelector('.gh-decimal-places').value = settings.decimalPlaces;
+        document.querySelector('.gh-passing-score').value = settings.passingScore;
+        setSettingsStatus('');
+    }
+
+    function setSettingsStatus(message, isError = false) {
+        const status = document.querySelector('.gh-settings-status');
+        if (!status) return;
+        status.textContent = message;
+        status.classList.toggle('is-error', isError);
+    }
+
+    function openGradeSettings() {
+        const overlay = document.querySelector('.gh-settings-overlay');
+        const button = document.querySelector('.gh-settings-btn');
+        renderSettingsEditor(gradeSettings);
+        overlay.hidden = false;
+        button.setAttribute('aria-expanded', 'true');
+        window.requestAnimationFrame(() => overlay.classList.add('is-open'));
+        overlay.querySelector('.gh-rule-grade')?.focus();
+    }
+
+    function closeGradeSettings() {
+        const overlay = document.querySelector('.gh-settings-overlay');
+        const button = document.querySelector('.gh-settings-btn');
+        overlay.classList.remove('is-open');
+        button.setAttribute('aria-expanded', 'false');
+        setTimeout(() => {
+            overlay.hidden = true;
+            button.focus();
+        }, 160);
+    }
+
+    function readSettingsEditor() {
+        const rows = Array.from(document.querySelectorAll('.gh-rule-row'));
+        document.querySelectorAll('.gh-settings-dialog .is-invalid').forEach(input => input.classList.remove('is-invalid'));
+        if (!rows.length) return { error: '请至少保留一条等级换算规则。' };
+
+        const seen = new Set();
+        const rules = [];
+        for (const row of rows) {
+            const gradeInput = row.querySelector('.gh-rule-grade');
+            const scoreInput = row.querySelector('.gh-rule-score');
+            const gpaInput = row.querySelector('.gh-rule-gpa');
+            const grade = normalizeGradeName(gradeInput.value);
+            const score = Number(scoreInput.value);
+            const gpa = Number(gpaInput.value);
+
+            if (!grade) {
+                gradeInput.classList.add('is-invalid');
+                return { error: '等级名称不能为空。' };
+            }
+            if (isNumericScore(grade)) {
+                gradeInput.classList.add('is-invalid');
+                return { error: '等级名称不能是纯数字，以免和百分制成绩混淆。' };
+            }
+            if (seen.has(grade)) {
+                gradeInput.classList.add('is-invalid');
+                return { error: `等级“${grade}”重复，请合并后再保存。` };
+            }
+            if (scoreInput.value === '' || !Number.isFinite(score) || score < 0 || score > 100) {
+                scoreInput.classList.add('is-invalid');
+                return { error: `等级“${grade}”的换算分数应在 0～100 之间。` };
+            }
+            if (gpaInput.value === '' || !Number.isFinite(gpa) || gpa < 0 || gpa > 10) {
+                gpaInput.classList.add('is-invalid');
+                return { error: `等级“${grade}”的绩点应在 0～10 之间。` };
+            }
+            seen.add(grade);
+            rules.push({ grade, score, gpa });
+        }
+
+        const decimalInput = document.querySelector('.gh-decimal-places');
+        const passingInput = document.querySelector('.gh-passing-score');
+        const decimalPlaces = Number(decimalInput.value);
+        const passingScore = Number(passingInput.value);
+        if (decimalInput.value === '' || !Number.isInteger(decimalPlaces) || decimalPlaces < 0 || decimalPlaces > 4) {
+            decimalInput.classList.add('is-invalid');
+            return { error: '小数位数应为 0～4 之间的整数。' };
+        }
+        if (passingInput.value === '' || !Number.isFinite(passingScore) || passingScore < 0 || passingScore > 100) {
+            passingInput.classList.add('is-invalid');
+            return { error: '及格分数线应在 0～100 之间。' };
+        }
+
+        return {
+            settings: {
+                rules,
+                averageMode: document.querySelector('.gh-average-mode').value,
+                decimalPlaces,
+                passingScore,
+            },
+        };
+    }
+
+    function bindGradeSettings() {
+        const overlay = document.querySelector('.gh-settings-overlay');
+        document.querySelector('.gh-settings-btn').addEventListener('click', openGradeSettings);
+        document.querySelector('.gh-settings-close').addEventListener('click', closeGradeSettings);
+        document.querySelector('.gh-cancel-settings-btn').addEventListener('click', closeGradeSettings);
+        document.querySelector('.gh-add-rule-btn').addEventListener('click', () => {
+            const editor = document.querySelector('.gh-rule-editor');
+            const row = createRuleEditorRow({ grade: '', score: '', gpa: '' });
+            editor.appendChild(row);
+            row.querySelector('.gh-rule-grade').focus();
+        });
+        document.querySelector('.gh-reset-settings-btn').addEventListener('click', () => {
+            renderSettingsEditor(cloneDefaultGradeSettings());
+            setSettingsStatus('已填入默认值，点击“保存并重算”后生效。');
+        });
+        document.querySelector('.gh-save-settings-btn').addEventListener('click', async event => {
+            const result = readSettingsEditor();
+            if (result.error) {
+                setSettingsStatus(result.error, true);
+                document.querySelector('.gh-settings-dialog .is-invalid')?.focus();
+                return;
+            }
+
+            const saveButton = event.currentTarget;
+            saveButton.disabled = true;
+            saveButton.textContent = '保存中…';
+            const saved = await persistGradeSettings(result.settings);
+            saveButton.disabled = false;
+            saveButton.textContent = '保存并重算';
+            if (!saved) {
+                setSettingsStatus('保存失败，请刷新页面后重试。', true);
+                return;
+            }
+            gradeSettings = sanitizeGradeSettings(result.settings);
+            applyGradeSettings();
+            closeGradeSettings();
+        });
+        overlay.addEventListener('click', event => {
+            if (event.target === overlay) closeGradeSettings();
+        });
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && !overlay.hidden) closeGradeSettings();
+        });
     }
 
     function getOrCreateGroup(year) {
@@ -595,6 +950,7 @@ console.log("Content Script 注入成功！");
 
         group.innerHTML = `
         <div class="gh-group-title">
+            <span class="gh-semester-drag-handle" draggable="true" title="拖动调整学期顺序" aria-label="拖动调整学期顺序">⋮⋮</span>
             <span class="gh-arrow">▼</span>
             ${year}
             <span class="gh-semester-avg">均分:0  均绩:0.00</span>
@@ -622,13 +978,48 @@ console.log("Content Script 注入成功！");
         const table = group.querySelector('.gh-table');
         const arrow = group.querySelector('.gh-arrow');
         const delBtn = group.querySelector('.gh-semester-del');
+        const dragHandle = group.querySelector('.gh-semester-drag-handle');
 
         title.addEventListener('click', (e) => {
-            if (e.target.closest('.gh-semester-del')) return;
+            if (e.target.closest('.gh-semester-del, .gh-semester-drag-handle')) return;
             const hidden = table.style.display === 'none';
             table.style.display = hidden ? '' : 'none';
             arrow.textContent = hidden ? '▼' : '▶';
         });
+
+        dragHandle.addEventListener('dragstart', (e) => {
+            draggedSemesterGroup = group;
+            group.classList.add('gh-dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', year);
+        });
+
+        dragHandle.addEventListener('dragend', () => {
+            group.classList.remove('gh-dragging');
+            container.querySelectorAll('.gh-drag-over').forEach(item => item.classList.remove('gh-drag-over'));
+            draggedSemesterGroup = null;
+            calculateAverage();
+        });
+
+        if (!container.dataset.dragSortBound) {
+            container.dataset.dragSortBound = 'true';
+            container.addEventListener('dragover', (e) => {
+                if (!draggedSemesterGroup) return;
+                const target = e.target.closest('.gh-group');
+                if (!target || target === draggedSemesterGroup || !container.contains(target)) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                container.querySelectorAll('.gh-drag-over').forEach(item => item.classList.remove('gh-drag-over'));
+                target.classList.add('gh-drag-over');
+                const before = e.clientY < target.getBoundingClientRect().top + target.offsetHeight / 2;
+                container.insertBefore(draggedSemesterGroup, before ? target : target.nextSibling);
+            });
+            container.addEventListener('drop', (e) => {
+                if (!draggedSemesterGroup) return;
+                e.preventDefault();
+                container.querySelectorAll('.gh-drag-over').forEach(item => item.classList.remove('gh-drag-over'));
+            });
+        }
 
         // 学期删除
         delBtn.addEventListener('click', (e) => {
@@ -649,24 +1040,30 @@ console.log("Content Script 注入成功！");
     //插入一个成绩
     function addGradeRow(year, name, credit, score, gpa, kch, displayGrade) {
         // 等级制成绩转换
-        const converted = resolveGrade(score, gpa);
+        const originalGrade = score && !isNumericScore(score) ? normalizeGradeName(score) : '';
+        const gradeLabel = displayGrade || (originalGrade ? score : '');
+        const converted = resolveGrade(score);
         if (converted) {
             score = converted.score.toString();
             gpa = converted.gpa.toString();
+        } else if (originalGrade) {
+            score = '';
+            gpa = '—';
         }
 
         const group = getOrCreateGroup(year);
         const tbody = group.querySelector('tbody');
         const tr = document.createElement('tr');
         tr.id = kch
-        if (parseFloat(score) < 60) tr.className = 'gh-row-warning';
+        if (originalGrade) tr.dataset.grade = originalGrade;
         tr.innerHTML = `
         <td>${name}</td>
         <td>${credit}</td>
-        <td data-score="${score}">${displayGrade || score}</td>
+        <td data-score="${score}">${gradeLabel || score}</td>
         <td>${gpa}</td>
         <td><a>删除</a></td>
     `;
+        updateRowState(tr);
         tr.addEventListener('click', (e) => {
             if (e.target.tagName === 'A') {
                 let to_delete_ele = e.target.closest('tr')
@@ -688,43 +1085,64 @@ console.log("Content Script 注入成功！");
         calculateAverage();
     }
 
-    function updateSemesterStats(group) {
-        const rows = group.querySelectorAll('tbody tr');
-        let totalScore = 0, totalCredit = 0, totalGpa = 0;
+    function calculateStats(rows) {
+        let totalScore = 0, scoreWeight = 0, totalGpa = 0, gpaWeight = 0;
         rows.forEach(row => {
             const credit = parseFloat(row.children[1].textContent) || 0;
-            totalScore += credit * (parseFloat(row.children[2].dataset.score) || 0);
-            totalGpa += credit * (parseFloat(row.children[3].textContent) || 0);
-            totalCredit += credit;
+            const scoreText = row.children[2].dataset.score;
+            const gpaText = row.children[3].textContent;
+            const score = scoreText === '' ? NaN : Number(scoreText);
+            const gpa = gpaText.trim() === '' ? NaN : Number(gpaText);
+            const weight = gradeSettings.averageMode === 'arithmetic' ? 1 : credit;
+            if (Number.isFinite(score) && weight > 0) {
+                totalScore += weight * score;
+                scoreWeight += weight;
+            }
+            if (Number.isFinite(gpa) && weight > 0) {
+                totalGpa += weight * gpa;
+                gpaWeight += weight;
+            }
         });
-        const avg = totalCredit ? (totalScore / totalCredit).toFixed(2) : '0';
-        const gpaAvg = totalCredit ? (totalGpa / totalCredit).toFixed(2) : '0.00';
+        return {
+            averageScore: scoreWeight ? (totalScore / scoreWeight).toFixed(gradeSettings.decimalPlaces) : (0).toFixed(gradeSettings.decimalPlaces),
+            averageGpa: gpaWeight ? (totalGpa / gpaWeight).toFixed(gradeSettings.decimalPlaces) : (0).toFixed(gradeSettings.decimalPlaces),
+        };
+    }
+
+    function updateRowState(row) {
+        const scoreText = row.children[2].dataset.score;
+        const score = scoreText === '' ? NaN : Number(scoreText);
+        const isUnmapped = Boolean(row.dataset.grade) && !Number.isFinite(score);
+        row.classList.toggle('gh-row-unmapped', isUnmapped);
+        row.classList.toggle('gh-row-warning', Number.isFinite(score) && score < gradeSettings.passingScore);
+        row.title = isUnmapped ? `等级“${row.dataset.grade}”尚未配置，不参与平均值计算` : '';
+    }
+
+    function applyGradeSettings() {
+        document.querySelectorAll('.gh-table tbody tr').forEach(row => {
+            if (row.dataset.grade) {
+                const converted = resolveGrade(row.dataset.grade);
+                row.children[2].dataset.score = converted ? converted.score : '';
+                row.children[3].textContent = converted ? converted.gpa : '—';
+            }
+            updateRowState(row);
+        });
+        renderRuleSummary();
+        calculateAverage();
+    }
+
+    function updateSemesterStats(group) {
+        const stats = calculateStats(group.querySelectorAll('tbody tr'));
         const display = group.querySelector('.gh-semester-avg');
-        if (display) display.textContent = `均分:${avg}  均绩:${gpaAvg}`;
+        if (display) display.textContent = `均分:${stats.averageScore}  均绩:${stats.averageGpa}`;
     }
 
     function calculateAverage() {
-
         const rows = document.querySelectorAll('.gh-table tbody tr');
+        const stats = calculateStats(rows);
 
-        let totalScore = 0;
-        let totalCredit = 0;
-        let totalGpa = 0;
-
-        rows.forEach(row => {
-            const credit = parseFloat(row.children[1].textContent) || 0;
-            const score = parseFloat(row.children[2].dataset.score) || 0;
-            const gpa = parseFloat(row.children[3].textContent) || 0;
-            totalScore += credit * score;
-            totalGpa += credit * gpa;
-            totalCredit += credit;
-        });
-
-        const avg = totalCredit ? (totalScore / totalCredit).toFixed(2) : 0;
-        const gpa_avg = totalCredit ? (totalGpa / totalCredit).toFixed(2) : 0;
-
-        document.querySelector('.gh-average').textContent = avg;
-        document.querySelector('.gpa-average').textContent = gpa_avg;
+        document.querySelector('.gh-average').textContent = stats.averageScore;
+        document.querySelector('.gpa-average').textContent = stats.averageGpa;
 
         document.querySelectorAll('.gh-group').forEach(updateSemesterStats);
     }
@@ -737,6 +1155,7 @@ console.log("Content Script 注入成功！");
         let dragging = false;
 
         header.addEventListener('mousedown', e => {
+            if (e.target.closest('button')) return;
             dragging = true;
 
             offsetX = e.clientX - panel.offsetLeft;
@@ -829,7 +1248,8 @@ console.log("Content Script 注入成功！");
     //页面刚打开
     if (document.body) {
         // body 已存在，可以安全挂载 MutationObserver
-        waitForElements((elements) => {
+        waitForElements(async (elements) => {
+            await loadGradeSettings();
             insertGradePanel();
             bindClearButton();
             search_btn_addEvent();

@@ -12,6 +12,8 @@
     background: white;
     border-radius: 10px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    color: #25201f;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
     font-size: 14px;
     z-index: 999999;
 }
@@ -30,6 +32,36 @@
     padding: 10px;
     font-weight: bold;
     cursor: move;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 40px;
+    box-sizing: border-box;
+}
+
+.gh-header-title {
+    letter-spacing: 0.04em;
+}
+
+.gh-settings-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+    transition: transform 0.25s ease, background 0.2s ease;
+}
+
+.gh-settings-btn:hover,
+.gh-settings-btn:focus-visible {
+    background: rgba(255, 255, 255, 0.24);
+    transform: rotate(28deg);
+    outline: none;
 }
 
 .gh-content {
@@ -53,6 +85,32 @@
     display: flex;
     align-items: center;
     gap: 6px;
+}
+
+.gh-semester-drag-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    color: #ad918b;
+    cursor: grab;
+    font-size: 15px;
+    letter-spacing: -3px;
+    line-height: 1;
+    user-select: none;
+}
+
+.gh-semester-drag-handle:active {
+    cursor: grabbing;
+}
+
+.gh-group.gh-dragging {
+    opacity: 0.48;
+}
+
+.gh-group.gh-drag-over {
+    outline: 2px dashed rgba(194, 45, 45, 0.55);
+    outline-offset: 2px;
 }
 
 .gh-arrow {
@@ -130,17 +188,33 @@
     font-weight: bold;
 }
 
+.gh-row-unmapped {
+    background: #fff8e5;
+}
+
+.gh-row-unmapped td {
+    color: #8a5a00;
+}
+
 .gh-footer {
     margin-top: 10px;
     padding: 0 10px 10px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 8px;
 }
 
 .gh-footer-left {
     font-weight: bold;
     color: #c62828;
+    white-space: nowrap;
+}
+
+.gh-footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .gh-clear-btn {
@@ -194,8 +268,354 @@ a:hover {
     pointer-events: none;
 }
 
+.gh-rule-tooltip {
+    width: 260px;
+    white-space: normal !important;
+    text-align: left;
+}
+
+.gh-grade-help-tooltip {
+    width: 240px;
+    white-space: normal !important;
+    text-align: left;
+}
+
+.gh-footer-actions .gh-help-tooltip {
+    right: 0;
+    left: auto;
+    transform: none;
+}
+
+.gh-tooltip-title {
+    margin-bottom: 6px;
+    color: #fff;
+    font-weight: bold;
+}
+
+.gh-rule-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2px 12px;
+    color: #fff;
+}
+
+.gh-tooltip-note {
+    margin-top: 6px;
+    color: #ffc46b;
+}
+
+.gh-calculation-summary {
+    margin-top: 7px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.16);
+    color: #ddd2cf;
+}
+
 .gh-help-icon:hover .gh-help-tooltip {
     display: block;
+}
+
+.gh-settings-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    box-sizing: border-box;
+    background: rgba(28, 18, 17, 0.38);
+    backdrop-filter: blur(3px);
+    opacity: 0;
+    transition: opacity 0.16s ease;
+    z-index: 1000001;
+}
+
+.gh-settings-overlay[hidden] {
+    display: none !important;
+}
+
+.gh-settings-overlay.is-open {
+    opacity: 1;
+}
+
+.gh-settings-dialog {
+    width: min(520px, calc(100vw - 48px));
+    max-height: min(680px, calc(100vh - 48px));
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid rgba(117, 34, 34, 0.18);
+    border-radius: 14px;
+    background: #fffdfb;
+    box-shadow: 0 24px 70px rgba(55, 20, 18, 0.28);
+    color: #292120;
+    transform: translateY(8px) scale(0.98);
+    transition: transform 0.16s ease;
+}
+
+.gh-settings-overlay.is-open .gh-settings-dialog {
+    transform: translateY(0) scale(1);
+}
+
+.gh-settings-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 20px 22px 16px;
+    border-bottom: 1px solid #eee3df;
+    background: linear-gradient(135deg, #fff8f5 0%, #fffdfb 72%);
+}
+
+.gh-settings-heading h2 {
+    margin: 0;
+    color: #8f1f1f;
+    font-size: 20px;
+    line-height: 1.3;
+}
+
+.gh-settings-heading p {
+    margin: 4px 0 0;
+    color: #826f6b;
+    font-size: 12px;
+}
+
+.gh-settings-close,
+.gh-remove-rule-btn {
+    border: 0;
+    background: transparent;
+    color: #8f7772;
+    cursor: pointer;
+}
+
+.gh-settings-close {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    font-size: 24px;
+    line-height: 26px;
+}
+
+.gh-settings-close:hover,
+.gh-settings-close:focus-visible {
+    background: #f5e8e4;
+    color: #a32323;
+    outline: none;
+}
+
+.gh-settings-body {
+    padding: 18px 22px;
+    overflow-y: auto;
+}
+
+.gh-settings-section + .gh-settings-section {
+    margin-top: 20px;
+}
+
+.gh-settings-section-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 9px;
+    color: #4a3835;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.gh-add-rule-btn {
+    border: 0;
+    background: transparent;
+    color: #b52525;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.gh-add-rule-btn:hover {
+    color: #d22e2e;
+    text-decoration: underline;
+}
+
+.gh-rule-table-wrap {
+    max-height: 280px;
+    overflow-y: auto;
+    border: 1px solid #eadeda;
+    border-radius: 9px;
+    background: white;
+}
+
+.gh-rule-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.gh-rule-table th {
+    position: sticky;
+    top: 0;
+    padding: 8px 7px;
+    background: #f8efec;
+    color: #765b56;
+    font-size: 11px;
+    font-weight: normal;
+    text-align: left;
+    z-index: 1;
+}
+
+.gh-rule-table th:nth-child(1) { width: 29%; }
+.gh-rule-table th:nth-child(2) { width: 27%; }
+.gh-rule-table th:nth-child(3) { width: 27%; }
+.gh-rule-table th:nth-child(4) { width: 30px; }
+
+.gh-rule-table td {
+    padding: 5px 7px;
+    border-top: 1px solid #f2e9e6;
+}
+
+.gh-rule-table input,
+.gh-calculation-settings input,
+.gh-calculation-settings select {
+    width: 100%;
+    height: 31px;
+    box-sizing: border-box;
+    border: 1px solid #d9cbc7;
+    border-radius: 6px;
+    background: #fff;
+    color: #332927;
+    font-family: inherit;
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.gh-rule-table input {
+    padding: 0 7px;
+}
+
+.gh-rule-table input:focus,
+.gh-calculation-settings input:focus,
+.gh-calculation-settings select:focus {
+    border-color: #c63a36;
+    box-shadow: 0 0 0 3px rgba(198, 58, 54, 0.12);
+}
+
+.gh-settings-dialog .is-invalid {
+    border-color: #d83232 !important;
+    box-shadow: 0 0 0 3px rgba(216, 50, 50, 0.12) !important;
+}
+
+.gh-remove-rule-btn {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    font-size: 19px;
+    line-height: 22px;
+}
+
+.gh-remove-rule-btn:hover,
+.gh-remove-rule-btn:focus-visible {
+    background: #fdebea;
+    color: #c92626;
+    outline: none;
+}
+
+.gh-calculation-settings {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 1fr;
+    gap: 10px;
+}
+
+.gh-calculation-settings .gh-settings-section-title {
+    grid-column: 1 / -1;
+    margin-bottom: 0;
+}
+
+.gh-calculation-settings label {
+    display: grid;
+    gap: 5px;
+    color: #76635f;
+    font-size: 11px;
+}
+
+.gh-calculation-settings input,
+.gh-calculation-settings select {
+    padding: 0 8px;
+}
+
+.gh-settings-status {
+    min-height: 18px;
+    margin: 12px 0 -4px;
+    color: #796560;
+    font-size: 12px;
+}
+
+.gh-settings-status.is-error {
+    color: #bf2222;
+}
+
+.gh-settings-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 22px;
+    border-top: 1px solid #eee3df;
+    background: #fffaf8;
+}
+
+.gh-settings-footer > div {
+    display: flex;
+    gap: 8px;
+}
+
+.gh-settings-footer button {
+    height: 34px;
+    padding: 0 14px;
+    border: 1px solid #d8c8c3;
+    border-radius: 7px;
+    background: white;
+    color: #654f4a;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.gh-settings-footer button:hover {
+    border-color: #bd9d96;
+    background: #fff6f3;
+}
+
+.gh-settings-footer .gh-save-settings-btn {
+    border-color: #b72525;
+    background: #b72525;
+    color: white;
+}
+
+.gh-settings-footer .gh-save-settings-btn:hover {
+    border-color: #971a1a;
+    background: #971a1a;
+}
+
+.gh-settings-footer button:disabled {
+    cursor: wait;
+    opacity: 0.65;
+}
+
+@media (max-width: 620px) {
+    .gh-settings-overlay {
+        padding: 12px;
+    }
+
+    .gh-settings-dialog {
+        width: calc(100vw - 24px);
+        max-height: calc(100vh - 24px);
+    }
+
+    .gh-calculation-settings {
+        grid-template-columns: 1fr;
+    }
+
+    .gh-calculation-settings .gh-settings-section-title {
+        grid-column: auto;
+    }
 }
 
 /*面板震动动画 */
