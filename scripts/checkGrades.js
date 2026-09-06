@@ -144,9 +144,16 @@ console.log("Content Script 注入成功！");
     function cal_width(exclude_array) {
         const header_columns = document.querySelectorAll(headerSelector + '>div')
         const columns_nums = header_columns.length;
-        const body_columns = document.querySelectorAll(bodySelector + ` tbody td:nth-child(-n+${columns_nums})`)
+        const body_root = document.querySelector(bodySelector);
         let width_array = [];
         let sum_width = 0;
+        const setColumnWidth = (element, columnWidth) => {
+            if (columnWidth === undefined) return;
+            const width = columnWidth + 'px';
+            element.style.width = width;
+            element.style.minWidth = width;
+            element.style.maxWidth = width;
+        };
         header_columns.forEach((ele, index) => {
             let current_width = parseInt(ele.style.width.match(/\d+/)[0]);
             if (!exclude_array.includes(index)) {
@@ -162,16 +169,40 @@ console.log("Content Script 注入成功！");
             width_array.push(current_width)
             ele.style.left = (sum_width - width_array[index]) + 'px';
         })
-        body_columns.forEach((ele, index) => {
-            if (exclude_array.includes(index % header_columns.length)) {
-                ele.style.display = 'none';
-                return;
-            };
-            ele.style.display = 'table-cell';
-            ele.style.width = width_array[index] + 'px';
-            ele.style.minWidth = ele.style.maxWidth
-        })
-        document.querySelector(headerSelector).parentElement.style.width = sum_width + 'px'
+        // 表头和正文是两套 DOM；按行设置正文单元格，避免跨行索引导致第二行起列宽错位。
+        document.querySelectorAll(bodySelector + ' tbody tr').forEach(row => {
+            Array.from(row.children)
+                .filter(cell => cell.tagName === 'TD')
+                .slice(0, columns_nums)
+                .forEach((cell, index) => {
+                    if (exclude_array.includes(index)) {
+                        cell.style.display = 'none';
+                        return;
+                    }
+                    cell.style.display = 'table-cell';
+                    setColumnWidth(cell, width_array[index]);
+                });
+        });
+
+        // 正文表格本身若仍保留 jqx 的原始总宽度，会在右侧产生不可见空白；
+        // 将它限制为可见列宽总和，滚动时只移动真实内容。
+        if (body_root) {
+            const body_table = body_root.matches('table')
+                ? body_root
+                : body_root.querySelector('table.jqx-grid-table, table');
+            if (body_table) {
+                body_table.style.width = sum_width + 'px';
+                // jqx 表格实际优先使用 colgroup 的列宽，必须同步限制 col 元素。
+                body_table.querySelectorAll('colgroup col').forEach((col, index) => {
+                    const hidden = exclude_array.includes(index);
+                    col.style.display = hidden ? 'none' : '';
+                    if (!hidden) setColumnWidth(col, width_array[index]);
+                });
+            }
+        }
+        const header_table = document.querySelector(headerSelector);
+        if (header_table) header_table.style.width = sum_width + 'px';
+        if (header_table?.parentElement) header_table.parentElement.style.width = sum_width + 'px';
         return sum_width;
     }
     //让拖动条可以拖拽到扩展列
@@ -185,6 +216,8 @@ console.log("Content Script 注入成功！");
         let width = cal_width(exclude_array);
         const processed = new Map();
 
+        const SCROLL_EXPANSION_FACTOR = 9.5;
+
         function doubleValueOnce(el, prop, signal) {
             const val = el.style[prop];
             if (!val) return;
@@ -194,12 +227,12 @@ console.log("Content Script 注入成功！");
             if (isNaN(num)) return;
 
             const unit = val.replace(num, "") || "px";
-            const newVal = num * 16 + unit;
+            const newVal = num * SCROLL_EXPANSION_FACTOR + unit;
             el.style[prop] = newVal;
             el.style['width'] = width + 'px';//宽度也要跟着一起变
             //如果signal为true，则需要多处理一步（标题栏的第一栏）
             if (signal)
-                el.querySelector('div').style['marginLeft'] = -num * 16 + 'px';
+                el.querySelector('div').style['marginLeft'] = -num * SCROLL_EXPANSION_FACTOR + 'px';
             processed.set(el, newVal);
         }
 
