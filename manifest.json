@@ -90,7 +90,6 @@
                 "scripts/inject.js"
             ],
             "matches": [
-                "https://ehall.xjtu.edu.cn/*",
                 "https://xjtu.yuketang.cn/*"
             ]
         }

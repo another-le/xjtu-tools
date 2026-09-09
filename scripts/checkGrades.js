@@ -1,432 +1,66 @@
-console.log("Content Script 注入成功！");
-(function inject() {
-    const script = document.createElement('script');
-    script.src = chrome.runtime.getURL('scripts/inject.js');
-    script.onload = function () {
-        this.remove();
-    };
-    (document.head || document.documentElement).appendChild(script);
-})();
-//列宽问题为什么总是对不齐？是因为表格有一个列宽调整功能，它内部的计算才是真正决定列宽的因素，必须把这个函数给禁掉才可以。
-//jqx切换后会尽量让用户看到切换前看到的数据
 (function () {
 
-    //等待某元素加载完成函数
-    function waitForElements(callback, disconnect = true, isdeleted = false, deletedElement = null, ...selectors) {
+    function waitForElements(callback, ...selectors) {
         const check = () => {
-            const elements = [];
-            for (const selector of selectors) {
-                const el = document.querySelector(selector);
-                if (!el) return null;
-                elements.push(el);
-            }
-            return elements;
-        };
-        let targetElement;
-        if (!isdeleted) {
-            const ready = check();
-            if (ready) {
-                callback(ready);
-                return;
-            }
-        }
-        else {
-            targetElement = typeof deletedElement === 'string'
-                ? document.querySelector(deletedElement)
-                : target;
-        }
-        const observer = new MutationObserver((mutations, obs) => {
-            // console.log(mutations);
-
-            let elementDeleted = false;
-            if (isdeleted) {
-                // console.log(mutations)
-                mutations.forEach((mutation) => {
-                    for (const removedNode of mutation.removedNodes) {
-                        // 检查被移除的节点是否就是目标元素，或者是目标元素的父节点
-                        if (removedNode === targetElement ||
-                            removedNode.contains?.(targetElement)) {
-                            elementDeleted = true;
-                        }
-                    }
-                })
-            }
-            else elementDeleted = true;
-            if (elementDeleted) {
-                const ready = check();
-                if (ready) {
-                    if (disconnect) obs.disconnect();
-                    callback(ready);
-                }
-            }
-        });
-
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true,
-            characterData: true,
-            attributes: true,  // 添加这行才能检测属性变化
-            attributeFilter: ['style'] //只监听特定属性
-        });
-    }
-
-    function fixed_columns() {
-        //have_btn 为true表示已经有按钮了，反之则为没有按钮
-        let have_btn = document.querySelector('#btn') ? true : false;
-        const copy_butn = document.querySelector('.bh-advancedQuery-inputGroup>a').cloneNode(false);
-        const select_all_btn = copy_butn.cloneNode(false);
-        const parent = document.querySelector('.jqx-tabs-title-container');
-        if (!have_btn) {
-            //创建一个“固定前三列”的按钮
-            copy_butn.innerHTML = '固定前三列'
-            copy_butn.id = 'btn';
-            copy_butn.removeAttribute('bh-advanced-query-role');
-            parent.appendChild(copy_butn)
-        }
-        //创建一个选择全部行的按钮
-        select_all_btn.innerHTML = '全选'
-        select_all_btn.id = 'selectAllBtn'
-        select_all_btn.removeAttribute('bh-advanced-query-role')
-        parent.appendChild(select_all_btn)
-        select_all_btn.addEventListener('click', () => {
-            let all_checked = document.querySelectorAll(copy_parent_div + ' tbody input[id^=checkbox]:not(:checked)')
-            if (all_checked.length)
-                document.querySelectorAll(copy_parent_div + ' tbody input[id^=checkbox]:not(:checked)').forEach((ele) => {
-                    ele.click();
-                })
-            else {
-                document.querySelectorAll(copy_parent_div + ' tbody input[id^=checkbox]:checked').forEach((ele) => {
-                    ele.click();
-                })
-            }
-        })
-        function copy_butn_callback(e) {
-            if (e.target.tagName === 'A') {
-                let id = '#fixed_columns' + pannel_num;
-                // is_fixed 为true表示已经固定了，反之则表示没有固定
-                let is_fixed = document.querySelector(id).style.display === 'block' ? true : false;
-                //如果固定了
-                if (is_fixed) {
-                    document.querySelector(id).style.display = 'none';
-                    return;
-                }
-                //如果没有固定则固定
-                document.querySelector(id).style.display = 'block';
-            }
-        }
-        // copy_butn.removeEventListener('click', copy_butn_callback)
-        copy_butn.addEventListener('click', copy_butn_callback);
-    }
-    //find的回调函数
-    function find_callback(el, index) {
-        if (el.style.display != 'none' && index === 1) {
-            headerSelector = '#columntableqb-index-table'
-            bodySelector = '#tableqb-index-table'
-            copy_parent_div = '#contentqb-index-table'
-            dragBarSelector = '#jqxScrollThumbhorizontalScrollBarqb-index-table'
-            pager = "#pagerqb-index-table"
-            exclude_array = [14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27];
-            pannel_num = 1;
-        }
-        else if (el.style.display != 'none' && index === 0) {
-            headerSelector = "#columntabledqxq-index-table";
-            bodySelector = "#contenttabledqxq-index-table";
-            copy_parent_div = "#contentdqxq-index-table";
-            dragBarSelector = "#jqxScrollThumbhorizontalScrollBardqxq-index-table";
-            pager = "#pagerdqxq-index-table"
-            exclude_array = [9];
-            pannel_num = 0;
-        }
-        return el.style.display != 'none'
-    }
-
-    //计算宽度，并且让所有列显示
-    function cal_width(exclude_array) {
-        const header_columns = document.querySelectorAll(headerSelector + '>div')
-        const columns_nums = header_columns.length;
-        const body_root = document.querySelector(bodySelector);
-        let width_array = [];
-        let sum_width = 0;
-        const setColumnWidth = (element, columnWidth) => {
-            if (columnWidth === undefined) return;
-            const width = columnWidth + 'px';
-            element.style.width = width;
-            element.style.minWidth = width;
-            element.style.maxWidth = width;
-        };
-        header_columns.forEach((ele, index) => {
-            let current_width = parseInt(ele.style.width.match(/\d+/)[0]);
-            if (!exclude_array.includes(index)) {
-                let span_ele = ele.querySelector('span');
-                ele.style.display = 'block';
-                if (span_ele.innerText.includes('SY') && !span_ele.innerText.includes('实验'))
-                    span_ele.innerText += '（实验成绩）'
-                if (span_ele.innerText.includes('QT') && !span_ele.innerText.includes('其他'))
-                    span_ele.innerText += `（其他成绩${span_ele.innerText.match(/\d+/)}）`
-                sum_width = sum_width + current_width;
-            }
-            else ele.style.display = 'none'
-            width_array.push(current_width)
-            ele.style.left = (sum_width - width_array[index]) + 'px';
-        })
-        // 表头和正文是两套 DOM；按行设置正文单元格，避免跨行索引导致第二行起列宽错位。
-        document.querySelectorAll(bodySelector + ' tbody tr').forEach(row => {
-            Array.from(row.children)
-                .filter(cell => cell.tagName === 'TD')
-                .slice(0, columns_nums)
-                .forEach((cell, index) => {
-                    if (exclude_array.includes(index)) {
-                        cell.style.display = 'none';
-                        return;
-                    }
-                    cell.style.display = 'table-cell';
-                    setColumnWidth(cell, width_array[index]);
-                });
-        });
-
-        // 正文表格本身若仍保留 jqx 的原始总宽度，会在右侧产生不可见空白；
-        // 将它限制为可见列宽总和，滚动时只移动真实内容。
-        if (body_root) {
-            const body_table = body_root.matches('table')
-                ? body_root
-                : body_root.querySelector('table.jqx-grid-table, table');
-            if (body_table) {
-                body_table.style.width = sum_width + 'px';
-                // jqx 表格实际优先使用 colgroup 的列宽，必须同步限制 col 元素。
-                body_table.querySelectorAll('colgroup col').forEach((col, index) => {
-                    const hidden = exclude_array.includes(index);
-                    col.style.display = hidden ? 'none' : '';
-                    if (!hidden) setColumnWidth(col, width_array[index]);
-                });
-            }
-        }
-        const header_table = document.querySelector(headerSelector);
-        if (header_table) header_table.style.width = sum_width + 'px';
-        if (header_table?.parentElement) header_table.parentElement.style.width = sum_width + 'px';
-        return sum_width;
-    }
-    //让拖动条可以拖拽到扩展列
-    function hookTableDrag(body, dragBar, header = null) {
-        if (hooked) return;
-        hooked = true;
-
-        console.log("[table drag hook] start hooking");
-
-        let dragging = false;
-        let width = cal_width(exclude_array);
-        const processed = new Map();
-
-        const SCROLL_EXPANSION_FACTOR = 9.5;
-
-        function doubleValueOnce(el, prop, signal) {
-            const val = el.style[prop];
-            if (!val) return;
-
-            if (processed.get(el) === val) return; // 已处理过
-            const num = parseFloat(val);
-            if (isNaN(num)) return;
-
-            const unit = val.replace(num, "") || "px";
-            const newVal = num * SCROLL_EXPANSION_FACTOR + unit;
-            el.style[prop] = newVal;
-            el.style['width'] = width + 'px';//宽度也要跟着一起变
-            //如果signal为true，则需要多处理一步（标题栏的第一栏）
-            if (signal)
-                el.querySelector('div').style['marginLeft'] = -num * SCROLL_EXPANSION_FACTOR + 'px';
-            processed.set(el, newVal);
-        }
-
-        // MutationObserver 监听 style 改变
-        const styleObserver = new MutationObserver((mutations) => {
-            if (!dragging) return;
-            // console.log(mutations);
-            mutations.forEach((m) => {
-                if (m.type === "attributes" && m.attributeName === "style") {
-                    if (header && m.target === header)
-                        doubleValueOnce(header, "marginLeft", pannel_num === 1);
-                    if (m.target === body) doubleValueOnce(body, "left", false);
-                }
-            });
-        });
-        if (header)
-            styleObserver.observe(header, { attributes: true, attributeFilter: ["style"] });
-        styleObserver.observe(body, { attributes: true, attributeFilter: ["style"] });
-
-        // 拖动事件
-        const onMouseDown = () => {
-            dragging = true;
-            processed.clear();
-        };
-        const onMouseUp = () => {
-            dragging = false;
-            processed.clear();
+            const elements = selectors.map(selector => document.querySelector(selector));
+            return elements.every(Boolean) ? elements : null;
         };
 
-        dragBar.addEventListener("mousedown", onMouseDown);
-        document.addEventListener("mouseup", onMouseUp);
-
-        console.log("[table drag hook] active");
-    }
-    //页数切换前后计算
-    function calculateNewRange(
-        selected_rows,           // 切换前每页条数
-        to_select_rows,          // 切换后每页条数
-        current_page_min_rows,   // 切换前当前页第一条序号
-        current_page_max_rows,   // 切换前当前页最后一条序号
-        totalRows                // 总数据条数（可选，用于边界检查）
-    ) {
-        // 1. 计算当前是第几页（基于切换前的配置）
-        const currentPage = Math.ceil(current_page_min_rows / selected_rows);
-
-        // 2. 计算当前页第一条在总数据中的位置（0-based索引）
-        const firstItemPosition = (currentPage - 1) * selected_rows;
-
-        // 3. 计算切换后的页码
-        const newPage = Math.floor(firstItemPosition / to_select_rows) + 1;
-
-        // 4. 计算切换后的显示范围
-        const afterMin = (newPage - 1) * to_select_rows + 1;
-
-        // 如果有总行数，进行边界检查
-        let afterMax;
-        if (totalRows) {
-            afterMax = Math.min(newPage * to_select_rows, totalRows);
-        } else {
-            afterMax = newPage * to_select_rows;
-        }
-
-        return {
-            newPage: newPage,                    // 切换后的页码
-            afterMin: afterMin,                  // 切换后第一条的序号
-            afterMax: afterMax,                  // 切换后最后一条的序号
-            totalRows: totalRows,                // 总行数（如果提供）
-        };
-    }
-    //上一页，下一页的按钮的回调函数
-    function switch_btns_callback(e) {
-        if (e && e.target.tagName !== 'I')
+        const ready = check();
+        if (ready) {
+            callback(ready);
             return;
-        hooked = false;
-        waitForElements((elements) => {
-            record = document.querySelector(pager + " .bh-pull-left>span").innerText;
-            current_page_max_rows = parseInt(record.match(/(?<=-)\d+/))
-            current_page_min_rows = parseInt(record.match(/\d+(?=-)/))
-            hookTableDrag(...elements);
-            copy_three_columns(true);
-        }, true, true, bodySelector + '>tbody', bodySelector, dragBarSelector)
-    }
-    function switch_pannel() {
-        //给切换页数添加监听事件
-        const switch_btns = document.querySelector(pager + " .bh-pull-left")
-        switch_btns.removeEventListener('click', switch_btns_callback)
-        switch_btns.addEventListener('click', switch_btns_callback)
-    }
-
-    let selected_rows, record, sum_rows, current_page_max_rows, current_page_min_rows;
-    function selector_numbers_addEvent(f) {
-        // 31-40 总记录数 47 总页数 5
-        // 右侧选中的每页条数
-        selected_rows = parseInt(document.querySelectorAll('[id^="dropdownlistContentjqxWidget"]')[pannel_num].innerText);
-        // 31-40 总记录数 47
-        record = document.querySelector(pager + " .bh-pull-left>span").innerText;
-        // 总记录数（47）
-        sum_rows = parseInt(record.match(/(?<=数 )\d+/)[0])
-        // 40
-        current_page_max_rows = parseInt(record.match(/(?<=-)\d+/))
-        // 31
-        current_page_min_rows = parseInt(record.match(/\d+(?=-)/))
-        if (f)
-            //接收页面回传消息
-            window.addEventListener("message", (event) => {
-                // 只处理来自页面自身的消息
-                if (event.source !== window) return;
-
-                if (event.data?.type === "JQX_SELECT_EVENT") {
-                    console.log("扩展收到 jqx select:", event.data.label, event.data.value);
-                    let to_select_rows = parseInt(event.data.value)
-                    if (to_select_rows > 1000) return;
-                    //如果两次切换的数字是一样的，就不用麻烦了;
-                    // if (selected_rows === to_select_rows)
-                    //     return;
-                    let afterclick_info = calculateNewRange(selected_rows, to_select_rows, current_page_min_rows, current_page_max_rows, sum_rows);
-                    hooked = false;
-                    //如果前后切换两次此页的记录不变，这时候他其实也是请求了，但是这时候不能走添加路线，也不走删除路线！是不用动横向的拖拉条的删除路线！
-                    // if (afterclick_info.afterMin === current_page_min_rows && afterclick_info.afterMax === current_page_max_rows) {
-                    //     waitForElements((elements) => {
-                    //         cal_width(exclude_array);
-                    //         copy_three_columns(true);
-                    //     }, true, true, bodySelector + ` tbody>tr:nth-child(${afterclick_info.afterMax - afterclick_info.afterMin + 1})`, bodySelector, dragBarSelector, bodySelector + ` tbody>tr:nth-child(${afterclick_info.afterMax - afterclick_info.afterMin + 1})`);
-                    // }
-                    //添加路线
-                    if (afterclick_info.afterMax - afterclick_info.afterMin > current_page_max_rows - current_page_min_rows) {
-                        waitForElements((elements) => {
-                            //第三个参数其实不是header，要去掉
-                            elements[2] = null;
-                            hookTableDrag(...elements);
-                            copy_three_columns(true);
-                        }, true, false, null, bodySelector, dragBarSelector, bodySelector + ` tbody>tr:nth-child(${afterclick_info.afterMax - afterclick_info.afterMin + 1})`);
-                    }
-                    // 删除路线
-                    else {
-                        waitForElements((elements) => {
-                            //第三个参数其实不是header，要去掉
-                            elements[2] = null;
-                            hookTableDrag(...elements);
-                            copy_three_columns(true);
-                        }, true, true, bodySelector + ` tbody>tr:nth-child(${current_page_max_rows - current_page_min_rows + 1})`, bodySelector, dragBarSelector, bodySelector + ` tbody>tr:nth-child(${afterclick_info.afterMax - afterclick_info.afterMin + 1})`);
-                    }
-                    selected_rows = to_select_rows
-                    record = document.querySelector(pager + " .bh-pull-left>span").innerText;
-                    current_page_max_rows = parseInt(record.match(/(?<=-)\d+/))
-                    current_page_min_rows = parseInt(record.match(/\d+(?=-)/))
-                }
-            });
-    }
-
-    //处理搜索框情况下，添加监听事件
-    function search_btn_addEvent() {
-        const search_btn = document.querySelector('a[bh-advanced-query-role=easySearchBtn]')
-        const clear_search_btn = document.querySelector('a[bh-advanced-query-role=clearBtn]')
-        const advanced_clear_search_btn = document.querySelector('a[bh-advanced-query-role=advancedClose]')
-        const search_input = document.querySelector('div.bh-advancedQuery-quick-search-wrap>input')
-        const advanced_search = document.querySelector('a[bh-advanced-query-role=advancedSearchBtn]')
-        const advanced_search_input = document.querySelector('input[bh-advanced-query-role=advancedInput]')
-        let search_btn_addEvent_callback = () => {
-            hooked = false;
-            waitForElements((elements) => {
-                document.querySelector(pager + ' div.bh-pull-left>input').readOnly = true
-                hookTableDrag(...elements);
-                copy_three_columns(true);
-                switch_pannel();
-                selector_numbers_addEvent(false);
-            }, true, true, bodySelector, bodySelector, dragBarSelector, headerSelector)
         }
-        search_input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter')
-                search_btn_addEvent_callback()
-        })
-        advanced_search_input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter')
-                search_btn_addEvent_callback()
-        })
-        search_btn.addEventListener('click', search_btn_addEvent_callback)
-        clear_search_btn.addEventListener('click', search_btn_addEvent_callback)
-        advanced_clear_search_btn.addEventListener('click', search_btn_addEvent_callback)
-        advanced_search.addEventListener('click', search_btn_addEvent_callback)
+
+        const observer = new MutationObserver((_, currentObserver) => {
+            const loadedElements = check();
+            if (loadedElements) {
+                currentObserver.disconnect();
+                callback(loadedElements);
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
     }
 
-    let hooked = false; // 确保 hook 只执行一次
-    //表示现在是哪个板块
-    let pannel_num = 0;
-    let headerSelector = "#columntabledqxq-index-table";
-    let bodySelector = "#contenttabledqxq-index-table";
-    //复制前三列用到的父元素
-    let copy_parent_div = "#contentdqxq-index-table"
-    let dragBarSelector = "#jqxScrollThumbhorizontalScrollBardqxq-index-table";
-    let pager = "#pagerdqxq-index-table"
-    let exclude_array = [9];
-    let selected_subjects = []
+    function insertSelectAllButton() {
+        if (document.querySelector('#selectAllBtn')) return;
+        const templateButton = document.querySelector('.bh-advancedQuery-inputGroup>a');
+        const parent = document.querySelector('.jqx-tabs-title-container');
+        if (!templateButton || !parent) return;
+
+        const selectAllButton = templateButton.cloneNode(false);
+        selectAllButton.textContent = '全选本页';
+        selectAllButton.id = 'selectAllBtn';
+        selectAllButton.removeAttribute('bh-advanced-query-role');
+        selectAllButton.addEventListener('click', () => {
+            const tableName = getActiveGradeTableName();
+            const checkboxes = Array.from(document.querySelectorAll(
+                `#contenttable${tableName}-index-table .xjtu-grade-select-checkbox:not(:disabled)`
+            ));
+            const shouldCheck = checkboxes.some(checkbox => !checkbox.checked);
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked !== shouldCheck) checkbox.click();
+            });
+        });
+        parent.appendChild(selectAllButton);
+    }
+
+    const GRADE_TABLE_NAMES = ['dqxq', 'qb'];
+
+    function getActiveGradeTableName() {
+        return GRADE_TABLE_NAMES.find(tableName => {
+            const table = document.querySelector(`#${tableName}-index-table`);
+            const tabPanel = table?.closest('div[role="tabpanel"]');
+            return table && (!tabPanel || getComputedStyle(tabPanel).display !== 'none');
+        }) || GRADE_TABLE_NAMES.find(tableName =>
+            document.querySelector(`#contenttable${tableName}-index-table`)
+        ) || 'dqxq';
+    }
+
+    const selectedCourseKeys = new Set();
     let draggedSemesterGroup = null;
+    const selectedCourseDetails = new Map();
+    let gradeDetailZIndex = 1000000;
 
     const TRANSCRIPT_PRINT_URL = 'https://dzpz.xjtu.edu.cn/wui/index.html?#/main/cs/app/de7bbe52b2684ad08df41d3043f07d80_Guide?mode=guide&id=29&menuId=2&_key=6pjdy6';
     const GRADE_SETTINGS_STORAGE_KEY = 'gradeHelperSettings';
@@ -554,119 +188,498 @@ console.log("Content Script 注入成功！");
         return rule ? { score: rule.score, gpa: rule.gpa, grade } : null;
     }
 
-    //添加方框
-    function addCheckbox() {
-        // 添加方框
-        let x = pannel_num == 0 ? 'dqxq' : 'qb'
-        let checkbox_places = document.querySelectorAll(`#contenttable${x}-index-table` + '>table:nth-child(1) tr>td:nth-child(1)')
-        if (!checkbox_places[0].querySelector('input') && checkbox_places[0].children.length)
-            checkbox_places.forEach((ele) => {
-                const checkbox = document.createElement('input')
-                checkbox.type = 'checkbox'
-                checkbox.style.position = 'absolute'
-                checkbox.style.left = '65px'
-                // 检查是否为缓考课程
-                const tr = ele.parentElement;
-                const isDeferred = tr && Array.from(tr.children).some(td => /缓考/.test(td.textContent));
-                if (isDeferred) {
-                    checkbox.disabled = true;
-                    checkbox.style.opacity = '0.35';
-                    checkbox.style.cursor = 'not-allowed';
-                }
-                pannel_num ? checkbox.id = 'checkbox' + ele.children[0].dataset.kch : checkbox.id = 'checkbox' + ele.nextSibling.children[0].title
-                pannel_num ? checkbox.checked = selected_subjects.includes(ele.children[0].dataset.kch) : checkbox.checked = selected_subjects.includes(ele.nextSibling.children[0].title)
-                ele.addEventListener('change', (e) => {
-                    let current_row_info = e.target.previousElementSibling
-                    let info = current_row_info.parentElement.parentElement.querySelectorAll('td>span');
-                    // console.log(current_row_info)
-                    if (e.target.checked) {
-                        if (current_row_info.dataset.xnxqdm) {
-                            let score = current_row_info.dataset.zcj;
-                            let displayGrade = null;
-                            // 等级制课程（有 djcjmc）：统一按用户配置的规则换算
-                            if (current_row_info.dataset.djcjmc) {
-                                if (score) {
-                                    // 有真实分数 → 显示"等级 (真实分数)"供参考
-                                    displayGrade = `${current_row_info.dataset.djcjmc} (${score})`;
-                                } else {
-                                    // 无真实分数 → 只显示等级
-                                    displayGrade = current_row_info.dataset.djcjmc;
-                                }
-                                score = current_row_info.dataset.djcjmc; // 传字母等级给 resolveGrade 查找当前换算规则
-                            }
-                            addGradeRow(current_row_info.dataset.xnxqdm, current_row_info.dataset.kcm, current_row_info.dataset.xf, score, current_row_info.dataset.xfjd, current_row_info.dataset.kch, displayGrade)
-                            selected_subjects.push(current_row_info.dataset.kch)
-                        } else {
-                            // dqxq面板数据来源（DOM结构）:
-                            //   info[10].title = 等级类型（如"等级制（2014级及以后）"）
-                            //   td[11]（无span，info[10]的nextSibling）= 成绩（字母等级如"A"或数字）
-                            //   info[11].title = 绩点（始终有数字值）
-                            let score = info[10].parentElement.nextSibling.innerText;
-                            let displayGrade = null;
-                            // 等级制且成绩是字母 → 转换后只显示等级
-                            if (/等级制/.test(info[10].title) && score && isNaN(parseFloat(score))) {
-                                displayGrade = score;
-                            }
-                            addGradeRow(convertSemester(info[0].title), info[2].title, info[7].title, score, info[11].title, info[1].title, displayGrade);
-                            selected_subjects.push(info[1].title);
-                        }
-                    }
-                    else {
-                        let index;
-                        pannel_num ? index = selected_subjects.indexOf(current_row_info.dataset.kch) : index = selected_subjects.indexOf(info[1].title);
-                        if (index !== -1) {
-                            selected_subjects.splice(index, 1);
-                            pannel_num ? document.querySelector(`.grade-helper-panel #${current_row_info.dataset.kch}`).remove() : document.querySelector(`.grade-helper-panel #${info[1].title}`).remove();
-                            // 如果这个学期下面没有课程了，就把这个学期的标题也删除了
-                            let group;
-                            if (pannel_num) group = document.querySelector(`.grade-helper-panel [data-year="${current_row_info.dataset.xnxqdm}"]`);
-                            else {
-                                group = document.querySelector(`.grade-helper-panel [data-year="${convertSemester(info[0].title)}"]`);
-                            }
-                            if (group && !group.querySelector('tbody tr')) {
-                                group.remove();
-                            }
-                            calculateAverage();
-                        }
-                    }
-                })
-                ele.appendChild(checkbox)
-            })
+    const GRADE_DETAIL_COLUMN_KEYS = {
+        dqxq: [
+            'XNXQDM_DISPLAY', 'KCH', 'KCM', 'KXH', 'KCXZDM_DISPLAY', 'KCLBDM_DISPLAY',
+            'KKDWDM_DISPLAY', 'XF', 'XS', 'XH', 'DJCJLXDM_DISPLAY', 'ZCJ', 'XFJD',
+            'XDFSDM_DISPLAY', 'SFZX_DISPLAY', 'CXCKDM_DISPLAY', 'SFYX_DISPLAY',
+            'SFJG_DISPLAY', 'TSYYDM_DISPLAY', 'SFPJ', 'JXBID', 'DJCJMC',
+            'QTCJ10_DISPLAY', 'QTCJ6_DISPLAY', 'QTCJ7_DISPLAY', 'QTCJ8_DISPLAY',
+            'QTCJ9_DISPLAY', 'QTCJ2_DISPLAY', 'QTCJ3_DISPLAY', 'QTCJ4_DISPLAY',
+            'QTCJ5_DISPLAY', 'QTCJ1_DISPLAY', 'JDF', 'PSCJ_DISPLAY', 'QMCJ_DISPLAY',
+            'QZCJ_DISPLAY', 'SYCJ_DISPLAY', 'SJCJ_DISPLAY',
+        ],
+        qb: [
+            'OPERATION', 'XNXQDM_DISPLAY', 'KCM', 'KCH', 'KXH', 'KCLBDM_DISPLAY',
+            'KCXZDM_DISPLAY', 'XF', 'XS', 'XDFSDM_DISPLAY', 'SFZX_DISPLAY', 'ZCJ',
+            'KSSJ', 'XFJD', 'JDF', 'BY8', 'BY7', 'RZLBDM', 'BY9', 'BY10', 'WID',
+            'ORDERFILTER', 'BY2', 'BY1', 'BY4', 'BY3', 'BY6', 'BY5', 'SJKSRQ', 'XH',
+            'JXBID', 'CXCKDM_DISPLAY', 'DJCJLXDM_DISPLAY', 'DJCJMC', 'PSCJ_DISPLAY',
+            'PSCJXS', 'QZCJ_DISPLAY', 'QZCJXS', 'QMCJ_DISPLAY', 'QMCJXS',
+            'SYCJ_DISPLAY', 'SJCJ_DISPLAY', 'QTCJ1_DISPLAY', 'QTCJ2_DISPLAY',
+            'QTCJ3_DISPLAY', 'QTCJ4_DISPLAY', 'QTCJ5_DISPLAY', 'QTCJ6_DISPLAY',
+            'QTCJ7_DISPLAY', 'QTCJ8_DISPLAY', 'QTCJ9_DISPLAY', 'QTCJ10_DISPLAY',
+            'KSLXDM_DISPLAY', 'KKDWDM_DISPLAY', 'SFJG_DISPLAY', 'SFYX_DISPLAY',
+            'TSYYDM_DISPLAY', 'SFPJ', 'HASFC',
+        ],
+    };
+
+    const GRADE_DETAIL_FIELD_CONFIG = {
+        XNXQDM_DISPLAY: { label: '学年学期', category: '课程信息' },
+        KCH: { label: '课程号', category: '课程信息' },
+        KCM: { label: '课程名称', category: '课程信息' },
+        KXH: { label: '课序号', category: '课程信息' },
+        KCXZDM_DISPLAY: { label: '课程性质', category: '课程信息' },
+        KCLBDM_DISPLAY: { label: '课程类别', category: '课程信息' },
+        KKDWDM_DISPLAY: { label: '开课单位', category: '课程信息' },
+        XF: { label: '学分', category: '课程信息' },
+        XS: { label: '学时', category: '课程信息' },
+        XDFSDM_DISPLAY: { label: '修读方式', category: '课程信息' },
+        SFZX_DISPLAY: { label: '修读类型', category: '课程信息' },
+        CXCKDM_DISPLAY: { label: '修读记录', category: '课程信息' },
+        KSLXDM_DISPLAY: { label: '考试类型', category: '课程信息' },
+        SJKSRQ: { label: '考试日期', category: '课程信息' },
+        DJCJLXDM_DISPLAY: { label: '成绩类型', category: '成绩构成' },
+        ZCJ: { label: '总成绩', category: '成绩构成' },
+        DJCJMC: { label: '等级成绩', category: '成绩构成' },
+        XFJD: { label: '绩点', category: '成绩构成' },
+        JDF: { label: '积点分', category: '成绩构成' },
+        PSCJ_DISPLAY: { label: '平时成绩', category: '成绩构成' },
+        PSCJXS: { label: '平时成绩占比', category: '成绩构成', percentage: true },
+        QZCJ_DISPLAY: { label: '期中成绩', category: '成绩构成' },
+        QZCJXS: { label: '期中成绩占比', category: '成绩构成', percentage: true },
+        QMCJ_DISPLAY: { label: '期末成绩', category: '成绩构成' },
+        QMCJXS: { label: '期末成绩占比', category: '成绩构成', percentage: true },
+        SYCJ_DISPLAY: { label: '实验成绩', category: '成绩构成' },
+        SJCJ_DISPLAY: { label: '实践成绩', category: '成绩构成' },
+        SFYX_DISPLAY: { label: '成绩是否有效', category: '成绩状态' },
+        SFJG_DISPLAY: { label: '是否及格', category: '成绩状态' },
+        TSYYDM_DISPLAY: { label: '特殊原因', category: '成绩状态' },
+        SFPJ: { label: '是否评教', category: '成绩状态', boolean: true },
+        HASFC: { label: '是否复查', category: '成绩状态', boolean: true },
+    };
+
+    for (let index = 1; index <= 10; index += 1) {
+        GRADE_DETAIL_FIELD_CONFIG[`QTCJ${index}_DISPLAY`] = {
+            label: `其他成绩${index}`,
+            category: '成绩构成',
+        };
     }
 
-    //复制前三列，插到指定位置
-    function copy_three_columns(isSwitch = false) {
-        //isSwitch为true表示当前盘上已经复制过了，但是里面的内容不对，需要删除了，重新来一遍
-        const pannel = Array.from(document.querySelectorAll('div[role=tabpanel]'))
-            .find(find_callback)
-        //复制前三列
-        const element = document.querySelector('#fixed_columns' + pannel_num)
-        if (isSwitch)
-            element.remove();
-        if (element && !isSwitch) return;
-        const parent_div = pannel.querySelector(copy_parent_div).cloneNode(true);
-        parent_div.removeAttribute('style');
-        parent_div.querySelectorAll('div[role]:nth-child(n+4)').forEach((ele) => ele.remove());
-        parent_div.querySelectorAll('tbody>tr>td:nth-child(n+4)').forEach((ele) => ele.remove());
-        if (pannel_num === 1) {
-            //如果是没有符合条件的数据的情况下，这里是不能删除的
-            let temp = parent_div.querySelector('#pinnedtableqb-index-table')
-            if (temp)
-                temp.remove()
+    const DETAIL_SKIPPED_KEYS = new Set([
+        'OPERATION', 'XH', 'JXBID', 'WID', 'ORDERFILTER', 'RZLBDM', 'KSSJ',
+        'BY1', 'BY2', 'BY3', 'BY4', 'BY5', 'BY6', 'BY7', 'BY8', 'BY9', 'BY10',
+    ]);
+    const DETAIL_PROMOTED_KEYS = new Set(['XNXQDM_DISPLAY', 'KCH', 'KCM', 'ZCJ', 'XF', 'XFJD']);
+
+    function cleanDetailValue(value) {
+        const text = String(value ?? '').trim();
+        return /^(null|undefined)$/i.test(text) ? '' : text;
+    }
+
+    function getCellText(cell) {
+        if (!cell) return '';
+        const titledElement = cell.querySelector('[title]');
+        const title = titledElement?.getAttribute('title');
+        if (title !== null && title !== undefined && title !== '') return cleanDetailValue(title);
+        return cleanDetailValue(cell.textContent);
+    }
+
+    function getCurrentHeaderLabels(tableName) {
+        return Array.from(document.querySelectorAll(`#columntable${tableName}-index-table > div`)).map(header => {
+            const labelElement = header.querySelector('span');
+            return cleanDetailValue(labelElement?.getAttribute('title') || labelElement?.textContent);
+        });
+    }
+
+    function normalizeDetailLabel(label) {
+        const raw = cleanDetailValue(label);
+        return raw.replace(/_DISPLAY$/i, '').replace(/^QT(?:CJ)?(\d+)$/i, '其他成绩$1');
+    }
+
+    function getDetailCategory(label) {
+        if (/成绩|绩点|积点|系数/.test(label)) return '成绩构成';
+        if (/有效|及格|评教|复查|特殊原因/.test(label)) return '成绩状态';
+        return '课程信息';
+    }
+
+    function formatDetailFieldValue(key, value) {
+        const text = cleanDetailValue(value);
+        if (!text) return '';
+        const config = GRADE_DETAIL_FIELD_CONFIG[key];
+        if (config?.percentage && /^-?\d+(?:\.\d+)?$/.test(text)) return `${text}%`;
+        if (config?.boolean) {
+            if (text === '1') return '是';
+            if (text === '0') return '否';
         }
-        parent_div.style.cssText = 'position: absolute;left: 18px; width: 300px;z-index:1000';
-        parent_div.querySelectorAll('[id]').forEach((ele) => ele.removeAttribute('id'));
-        parent_div.id = 'fixed_columns' + pannel_num
-        parent_div.querySelectorAll('td').forEach(ele => ele.style.visibility = 'visible')
-        parent_div.querySelector('table').style.left = '0px'
-        parent_div.querySelector('.jqx-widget-header>div').style.marginLeft = '0px'
-        parent_div.querySelector('.jqx-widget-header>div>div').style.marginLeft = '0px'
-        //先设置为none，按钮用于调整此选项
-        parent_div.style.display = 'none';
-        //插到指定位置
-        console.log("调整了前三列，个数为：", parent_div.querySelectorAll("tr").length)
-        document.querySelectorAll('.bh-mt-8>section')[pannel_num].prepend(parent_div);
-        addCheckbox();
+        return text;
+    }
+
+    function extractCourseDetail(row, tableName) {
+        const headerLabels = getCurrentHeaderLabels(tableName);
+        const columnKeys = GRADE_DETAIL_COLUMN_KEYS[tableName] || [];
+        const cells = Array.from(row.children).filter(cell => cell.tagName === 'TD');
+        const fields = [];
+
+        cells.forEach((cell, index) => {
+            const key = columnKeys[index] || headerLabels[index] || `field-${index}`;
+            if (DETAIL_SKIPPED_KEYS.has(key)) return;
+            const config = GRADE_DETAIL_FIELD_CONFIG[key];
+            const label = config?.label || normalizeDetailLabel(headerLabels[index]);
+            const value = formatDetailFieldValue(key, getCellText(cell));
+            if (!label || !value) return;
+            fields.push({
+                key,
+                label,
+                value,
+                category: config?.category || getDetailCategory(label),
+            });
+        });
+
+        const fieldValue = (...identifiers) => fields.find(item =>
+            identifiers.includes(item.key) || identifiers.includes(item.label)
+        )?.value || '';
+        const detailAnchor = row.querySelector('a[data-kch]');
+        const dataset = detailAnchor?.dataset || {};
+        const semester = convertSemester(cleanDetailValue(dataset.xnxqdm || fieldValue('XNXQDM_DISPLAY')));
+        const code = cleanDetailValue(dataset.kch || fieldValue('KCH'));
+        const name = cleanDetailValue(dataset.kcm || fieldValue('KCM'));
+        const sequence = fieldValue('KXH');
+        const key = [semester, code, sequence].filter(Boolean).join('::');
+        const gradeName = cleanDetailValue(dataset.djcjmc || fieldValue('DJCJMC'));
+        const rawScore = cleanDetailValue(dataset.zcj || fieldValue('ZCJ'));
+        const totalScore = gradeName && rawScore && gradeName !== rawScore
+            ? `${gradeName} (${rawScore})`
+            : (gradeName || rawScore);
+
+        return {
+            key: key || `${semester}::${code}::${name}`,
+            semester,
+            code,
+            name,
+            credit: cleanDetailValue(dataset.xf || fieldValue('XF')),
+            totalScore,
+            gradePoint: cleanDetailValue(dataset.xfjd || fieldValue('XFJD')),
+            fields: fields.filter(field => !DETAIL_PROMOTED_KEYS.has(field.key)),
+        };
+    }
+
+    function createDetailTextElement(tagName, className, text) {
+        const element = document.createElement(tagName);
+        if (className) element.className = className;
+        element.textContent = text || '—';
+        return element;
+    }
+
+    function detailFieldRank(field) {
+        const fixedOrder = ['总成绩', '等级成绩', '绩点', '积点分', '平时成绩', '期中成绩', '期末成绩', '实验成绩', '实践成绩'];
+        const baseLabel = field.label.replace(/系数$/, '');
+        const fixedIndex = fixedOrder.indexOf(baseLabel);
+        if (fixedIndex !== -1) return fixedIndex * 2 + (/系数$/.test(field.label) ? 1 : 0);
+        const otherScore = field.label.match(/^其他成绩(\d+)(系数)?$/);
+        if (otherScore) return 30 + Number(otherScore[1]) * 2 + (otherScore[2] ? 1 : 0);
+        return 1000;
+    }
+
+    function positionGradeDetailPanel(panel) {
+        const usedSlots = new Set(Array.from(document.querySelectorAll('.gh-course-detail-panel'))
+            .filter(item => item !== panel)
+            .map(item => Number(item.dataset.layoutSlot))
+            .filter(Number.isFinite));
+        let layoutSlot = 0;
+        while (usedSlots.has(layoutSlot)) layoutSlot += 1;
+        panel.dataset.layoutSlot = layoutSlot;
+        const panelWidth = panel.offsetWidth || 420;
+        const gap = 12;
+        const margin = 16;
+        const columns = Math.max(1, Math.floor((window.innerWidth - margin * 2 + gap) / (panelWidth + gap)));
+        const column = layoutSlot % columns;
+        const row = Math.floor(layoutSlot / columns);
+        panel.style.left = `${margin + column * (panelWidth + gap)}px`;
+        panel.style.top = `${Math.min(76 + row * 34, Math.max(16, window.innerHeight - 180))}px`;
+    }
+
+    function bringGradeDetailPanelToFront(panel) {
+        gradeDetailZIndex += 1;
+        panel.style.zIndex = String(gradeDetailZIndex);
+    }
+
+    function makeGradeDetailPanelDraggable(panel) {
+        const header = panel.querySelector('.gh-detail-panel-header');
+        let offsetX = 0;
+        let offsetY = 0;
+
+        header.addEventListener('mousedown', event => {
+            if (event.button !== 0 || event.target.closest('button')) return;
+            event.preventDefault();
+            offsetX = event.clientX - panel.offsetLeft;
+            offsetY = event.clientY - panel.offsetTop;
+
+            const move = moveEvent => {
+                const maxLeft = Math.max(0, window.innerWidth - panel.offsetWidth);
+                const maxTop = Math.max(0, window.innerHeight - header.offsetHeight);
+                panel.style.left = `${Math.min(Math.max(0, moveEvent.clientX - offsetX), maxLeft)}px`;
+                panel.style.top = `${Math.min(Math.max(0, moveEvent.clientY - offsetY), maxTop)}px`;
+            };
+            const stop = () => {
+                document.removeEventListener('mousemove', move);
+                document.removeEventListener('mouseup', stop);
+            };
+            document.addEventListener('mousemove', move);
+            document.addEventListener('mouseup', stop);
+        });
+    }
+
+    function openGradeDetailPanel(detail) {
+        if (!detail?.key) return;
+        const existing = Array.from(document.querySelectorAll('.gh-course-detail-panel'))
+            .find(panel => panel.dataset.courseKey === detail.key);
+        if (existing) {
+            bringGradeDetailPanelToFront(existing);
+            existing.classList.remove('gh-detail-panel-pulse');
+            requestAnimationFrame(() => existing.classList.add('gh-detail-panel-pulse'));
+            return;
+        }
+
+        const panel = document.createElement('section');
+        panel.className = 'gh-course-detail-panel';
+        panel.dataset.courseKey = detail.key;
+        panel.setAttribute('aria-label', `${detail.name}成绩详情`);
+        panel.innerHTML = `
+            <header class="gh-detail-panel-header">
+                <div>
+                    <span class="gh-detail-eyebrow">课程成绩详情</span>
+                    <h2 class="gh-detail-course-name"></h2>
+                </div>
+                <button type="button" class="gh-detail-close" aria-label="关闭成绩详情">×</button>
+            </header>
+            <div class="gh-detail-meta">
+                <span class="gh-detail-semester"></span>
+                <span class="gh-detail-code"></span>
+            </div>
+            <div class="gh-detail-summary" aria-label="课程成绩摘要"></div>
+            <div class="gh-detail-fields"></div>
+            <footer class="gh-detail-footer"></footer>
+        `;
+
+        const courseName = detail.name || '未命名课程';
+        const courseNameElement = panel.querySelector('.gh-detail-course-name');
+        courseNameElement.textContent = courseName;
+        courseNameElement.title = courseName;
+        panel.querySelector('.gh-detail-semester').textContent = detail.semester || '未知学期';
+        panel.querySelector('.gh-detail-code').textContent = detail.code || '无课程号';
+
+        const summary = panel.querySelector('.gh-detail-summary');
+        [['总成绩', detail.totalScore], ['绩点', detail.gradePoint], ['学分', detail.credit]].forEach(([label, value]) => {
+            const item = document.createElement('div');
+            item.append(
+                createDetailTextElement('span', '', label),
+                createDetailTextElement('strong', '', value)
+            );
+            summary.appendChild(item);
+        });
+
+        const fieldsContainer = panel.querySelector('.gh-detail-fields');
+        ['成绩构成', '课程信息', '成绩状态'].forEach(category => {
+            const fields = detail.fields
+                .filter(field => field.category === category)
+                .sort((a, b) => detailFieldRank(a) - detailFieldRank(b));
+            if (!fields.length) return;
+
+            const section = document.createElement('section');
+            section.className = 'gh-detail-section';
+            section.dataset.category = category;
+            const heading = document.createElement('div');
+            heading.className = 'gh-detail-section-heading';
+            heading.append(
+                createDetailTextElement('h3', '', category),
+                createDetailTextElement('span', '', `${fields.length} 项`)
+            );
+            const list = document.createElement('dl');
+            fields.forEach(field => {
+                const fieldRow = document.createElement('div');
+                fieldRow.className = 'gh-detail-field-row';
+                fieldRow.append(
+                    createDetailTextElement('dt', '', field.label),
+                    createDetailTextElement('dd', '', field.value)
+                );
+                list.appendChild(fieldRow);
+            });
+            section.append(heading, list);
+            fieldsContainer.appendChild(section);
+        });
+
+        panel.querySelector('.gh-detail-footer').textContent = `已展示 ${detail.fields.length} 项有效信息`;
+        panel.querySelector('.gh-detail-close').addEventListener('click', event => {
+            event.stopPropagation();
+            panel.remove();
+        });
+        panel.addEventListener('mousedown', event => {
+            event.stopPropagation();
+            bringGradeDetailPanelToFront(panel);
+        });
+        panel.addEventListener('click', event => event.stopPropagation());
+        document.body.appendChild(panel);
+        bringGradeDetailPanelToFront(panel);
+        positionGradeDetailPanel(panel);
+        makeGradeDetailPanelDraggable(panel);
+    }
+
+    function removeSelectedCourse(row) {
+        if (!row) return;
+        selectedCourseDetails.delete(row.dataset.courseKey);
+        row.remove();
+    }
+
+    function syncCourseCheckboxes(courseKey, checked) {
+        document.querySelectorAll('.xjtu-grade-select-checkbox').forEach(checkbox => {
+            if (checkbox.dataset.courseKey === courseKey) checkbox.checked = checked;
+        });
+    }
+
+    function locateCourseInStats(courseKey, courseCode) {
+        const row = Array.from(document.querySelectorAll('.grade-helper-panel .gh-table tbody tr'))
+            .find(item => item.dataset.courseKey === courseKey || item.id === courseCode);
+        if (!row) return;
+
+        const group = row.closest('.gh-group');
+        const table = group?.querySelector('.gh-table');
+        const arrow = group?.querySelector('.gh-arrow');
+        if (table?.style.display === 'none') {
+            table.style.display = '';
+            if (arrow) arrow.textContent = '▼';
+        }
+
+        const content = row.closest('.gh-content');
+        if (content) {
+            const contentRect = content.getBoundingClientRect();
+            const rowRect = row.getBoundingClientRect();
+            const centeredTop = content.scrollTop + rowRect.top - contentRect.top
+                - (content.clientHeight - row.offsetHeight) / 2;
+            content.scrollTo({ top: Math.max(0, centeredTop), behavior: 'auto' });
+        }
+
+        row.classList.remove('gh-row-locate-flash');
+        requestAnimationFrame(() => {
+            row.classList.add('gh-row-locate-flash');
+            setTimeout(() => row.classList.remove('gh-row-locate-flash'), 1200);
+        });
+    }
+
+    // 在学校原始表格上只增加选择框和详情入口，不改变原有列宽与显示状态。
+    function enhanceGradeTable(tableName) {
+        const rows = document.querySelectorAll(`#contenttable${tableName}-index-table > table:nth-child(1) tbody > tr`);
+
+        rows.forEach(row => {
+            const firstCell = row.children[0];
+            const courseCell = row.children[2];
+            if (!firstCell || !courseCell) return;
+
+            const detail = extractCourseDetail(row, tableName);
+            row.dataset.gradeDetailKey = detail.key;
+            firstCell.classList.add('xjtu-grade-operation-cell');
+
+            if (!courseCell.querySelector('.xjtu-grade-detail-btn')) {
+                courseCell.classList.add('xjtu-grade-course-cell');
+                const detailButton = document.createElement('button');
+                detailButton.type = 'button';
+                detailButton.className = 'xjtu-grade-detail-btn';
+                detailButton.textContent = '成绩详情';
+                detailButton.title = `查看${detail.name || '该课程'}的成绩详情`;
+                detailButton.addEventListener('click', event => {
+                    event.stopPropagation();
+                    openGradeDetailPanel(detail);
+                });
+                courseCell.appendChild(detailButton);
+            }
+
+            if (firstCell.querySelector('.xjtu-grade-select-checkbox')) return;
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'xjtu-grade-select-checkbox';
+            checkbox.id = `checkbox${detail.code}`;
+            checkbox.dataset.courseKey = detail.key;
+            checkbox.checked = selectedCourseKeys.has(detail.key);
+            checkbox.title = '加入成绩统计';
+            checkbox.setAttribute('aria-label', `将${detail.name || '该课程'}加入成绩统计`);
+
+            const isDeferred = Array.from(row.children).some(td => /缓考/.test(td.textContent));
+            if (isDeferred) {
+                checkbox.disabled = true;
+                checkbox.title = '缓考课程暂不参与成绩统计';
+            }
+
+            checkbox.addEventListener('change', event => {
+                if (event.currentTarget.checked) {
+                    if (selectedCourseKeys.has(detail.key)) {
+                        syncCourseCheckboxes(detail.key, true);
+                        return;
+                    }
+                    let score = detail.totalScore;
+                    let displayGrade = null;
+                    const detailAnchor = row.querySelector('a[data-kch]');
+                    const rawScore = cleanDetailValue(detailAnchor?.dataset.zcj || detail.totalScore);
+                    const gradeName = cleanDetailValue(detailAnchor?.dataset.djcjmc);
+
+                    if (gradeName) {
+                        displayGrade = rawScore ? `${gradeName} (${rawScore})` : gradeName;
+                        score = gradeName;
+                    } else if (!isNumericScore(score)) {
+                        displayGrade = score;
+                    }
+
+                    addGradeRow(
+                        detail.semester, detail.name, detail.credit, score,
+                        detail.gradePoint, detail.code, displayGrade, detail
+                    );
+                    selectedCourseKeys.add(detail.key);
+                    syncCourseCheckboxes(detail.key, true);
+                    return;
+                }
+
+                selectedCourseKeys.delete(detail.key);
+                syncCourseCheckboxes(detail.key, false);
+                const gradeRow = Array.from(document.querySelectorAll('.grade-helper-panel .gh-table tbody tr'))
+                    .find(item => item.dataset.courseKey === detail.key || item.id === detail.code);
+                const group = gradeRow?.closest('.gh-group');
+                removeSelectedCourse(gradeRow);
+                if (group && !group.querySelector('tbody tr')) group.remove();
+                calculateAverage();
+            });
+
+            const locateButton = document.createElement('button');
+            locateButton.type = 'button';
+            locateButton.className = 'xjtu-grade-locate-btn';
+            locateButton.innerHTML = `
+                <svg class="xjtu-grade-locate-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                    <circle cx="8" cy="8" r="3.25"></circle>
+                    <circle class="xjtu-grade-locate-dot" cx="8" cy="8" r="0.9"></circle>
+                    <path d="M8 1.5V4M8 12v2.5M1.5 8H4M12 8h2.5"></path>
+                </svg>`;
+            locateButton.title = '在成绩统计中定位该课程';
+            locateButton.setAttribute('aria-label', `在成绩统计中定位${detail.name || '该课程'}`);
+            locateButton.addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
+                locateCourseInStats(detail.key, detail.code);
+            });
+
+            const actions = document.createElement('span');
+            actions.className = 'xjtu-grade-inline-actions';
+            actions.append(checkbox, locateButton);
+            firstCell.appendChild(actions);
+        });
+    }
+
+    function enhanceAllGradeTables() {
+        GRADE_TABLE_NAMES.forEach(enhanceGradeTable);
+    }
+
+    function observeGradeTableChanges() {
+        const tabsContent = document.querySelector('.jqx-tabs-content');
+        if (!tabsContent || tabsContent.dataset.gradeDetailsObserved) return;
+        tabsContent.dataset.gradeDetailsObserved = 'true';
+        let scheduled = false;
+        const observer = new MutationObserver(mutations => {
+            if (!mutations.some(mutation => mutation.type === 'childList' && mutation.addedNodes.length)) return;
+            if (scheduled) return;
+            scheduled = true;
+            requestAnimationFrame(() => {
+                scheduled = false;
+                enhanceAllGradeTables();
+            });
+        });
+        observer.observe(tabsContent, { childList: true, subtree: true });
     }
 
     function insertGradePanel() {
@@ -1077,10 +1090,9 @@ console.log("Content Script 注入成功！");
             e.stopPropagation();
             const tbody = group.querySelector('tbody');
             tbody.querySelectorAll('tr').forEach(tr => {
-                const kch = tr.id;
-                const idx = selected_subjects.indexOf(kch);
-                if (idx !== -1) selected_subjects.splice(idx, 1);
-                document.querySelectorAll(`[id="checkbox${kch}"]`).forEach(cb => cb.checked = false);
+                selectedCourseKeys.delete(tr.dataset.courseKey);
+                selectedCourseDetails.delete(tr.dataset.courseKey);
+                syncCourseCheckboxes(tr.dataset.courseKey, false);
             });
             group.remove();
             calculateAverage();
@@ -1089,7 +1101,7 @@ console.log("Content Script 注入成功！");
         return group;
     }
     //插入一个成绩
-    function addGradeRow(year, name, credit, score, gpa, kch, displayGrade) {
+    function addGradeRow(year, name, credit, score, gpa, kch, displayGrade, courseDetail) {
         // 等级制成绩转换
         const originalGrade = score && !isNumericScore(score) ? normalizeGradeName(score) : '';
         const gradeLabel = displayGrade || (originalGrade ? score : '');
@@ -1106,29 +1118,34 @@ console.log("Content Script 注入成功！");
         const tbody = group.querySelector('tbody');
         const tr = document.createElement('tr');
         tr.id = kch
+        tr.dataset.courseKey = courseDetail?.key || `${year}::${kch}`;
+        if (courseDetail) {
+            selectedCourseDetails.set(tr.dataset.courseKey, courseDetail);
+        }
         if (originalGrade) tr.dataset.grade = originalGrade;
         tr.innerHTML = `
         <td>${name}</td>
         <td>${credit}</td>
         <td data-score="${score}">${gradeLabel || score}</td>
         <td>${gpa}</td>
-        <td><a>删除</a></td>
+        <td><span class="gh-row-actions"><button type="button" class="gh-row-detail">详情</button><button type="button" class="gh-row-delete">删除</button></span></td>
     `;
         updateRowState(tr);
         tr.addEventListener('click', (e) => {
-            if (e.target.tagName === 'A') {
-                let to_delete_ele = e.target.closest('tr')
-                to_delete_ele.remove()
-                const index = selected_subjects.indexOf(to_delete_ele.id);
-                if (index !== -1) {
-                    selected_subjects.splice(index, 1);
-                    document.querySelectorAll(`[id="checkbox${to_delete_ele.id}"]`).forEach(cb => cb.checked = false);
-                    // 如果这个学期下面没有课程了，就把这个学期的标题也删除了
-                    if (group.querySelector('tbody tr') === null) {
-                        group.remove();
-                    }
-                    calculateAverage();
+            if (e.target.closest('.gh-row-detail')) {
+                openGradeDetailPanel(selectedCourseDetails.get(tr.dataset.courseKey));
+                return;
+            }
+            if (e.target.closest('.gh-row-delete')) {
+                const to_delete_ele = e.target.closest('tr');
+                removeSelectedCourse(to_delete_ele);
+                selectedCourseKeys.delete(to_delete_ele.dataset.courseKey);
+                syncCourseCheckboxes(to_delete_ele.dataset.courseKey, false);
+                // 如果这个学期下面没有课程了，就把这个学期的标题也删除了
+                if (group.querySelector('tbody tr') === null) {
+                    group.remove();
                 }
+                calculateAverage();
             }
         })
         tbody.appendChild(tr);
@@ -1259,92 +1276,26 @@ console.log("Content Script 注入成功！");
             setTimeout(() => {
                 // 清空数据
                 groups.innerHTML = '';
-                selected_subjects = [];
-                document.querySelectorAll('td>input').forEach(ele => {
-                    ele.checked = false;
-                })
+                selectedCourseKeys.clear();
+                selectedCourseDetails.clear();
+                document.querySelectorAll('.xjtu-grade-select-checkbox').forEach(checkbox => {
+                    checkbox.checked = false;
+                });
                 groups.classList.remove('gh-fade-out');
                 calculateAverage();
             }, 250);
         });
     }
 
-    //全局监听
-    function full_mutations() {
-        //现在有一个问题：就是当我切换页数的时候，它竟然时不时调用一下表头的style函数，将我的操作给“取消”掉。所以我必须全局监控一下表头的属性变化，当它想给我表头取消掉的时候，我要再次调用一下我的一系列函数。
-        // 创建 MutationObserver 实例
-        const observer = new MutationObserver((mutations) => {
-            // console.log(mutations);
-            // 过滤并输出 style 属性相关的 mutations
-            mutations.forEach(mutation => {
-                if (mutation.type === 'attributes' &&
-                    mutation.attributeName === 'style' && mutation.oldValue === 'z-index: 330; position: absolute; height: 100%; width: 100px; display: block; left: 1500px;') {
-                    console.log("属性变化了");
-                    hooked = false;
-                    waitForElements((elements) => {
-                        hookTableDrag(...elements);
-                        copy_three_columns(true);
-                    }, true, false, null, bodySelector, dragBarSelector)
-                }
-            }
-            );
-        });
-
-        // 配置观察选项（监听 DOM 元素的 style 属性变化）
-        const observerConfig = {
-            attributes: true,               // 监听属性变化
-            attributeOldValue: true,        // 记录属性旧值
-            attributeFilter: ['style'],     // 仅监听 style 属性
-            subtree: true                 // 监听子元素
-        };
-
-        // 开始观察
-        const element = document.querySelector('.jqx-tabs-content');
-        if (element) {
-            observer.observe(element, observerConfig);
-            console.log('开始监听元素 style 属性变化');
-        } else {
-            console.error('未找到要监听的元素');
-        }
-    }
-
-    //页面刚打开
+    // 页面初始化后，统一增强两张成绩表；分页、搜索和标签切换产生的新行由观察器接管。
     if (document.body) {
-        // body 已存在，可以安全挂载 MutationObserver
-        waitForElements(async (elements) => {
+        waitForElements(async () => {
             await loadGradeSettings();
             insertGradePanel();
             bindClearButton();
-            search_btn_addEvent();
-            document.querySelector(pager + ' div.bh-pull-left>input').readOnly = true
-            full_mutations()
-            //扩展所有列，处理拖动条
-            hookTableDrag(...elements);
-            //复制前三列
-            copy_three_columns();
-            //处理钉住前三列的按钮
-            fixed_columns();
-            //给切换按钮添加监听事件
-            const btns = document.querySelectorAll('.jqx-tabs-title-container>li');
-            btns.forEach((btn) => {
-                function onTabClick() {
-                    hooked = false;
-                    Array.from(document.querySelectorAll('div[role=tabpanel]'))
-                        .find(find_callback)
-                    waitForElements((elements) => {
-                        document.querySelector(pager + ' div.bh-pull-left>input').readOnly = true
-                        hookTableDrag(...elements);
-                        copy_three_columns();
-                        // fixed_columns();
-                        switch_pannel();
-                        selector_numbers_addEvent(false);
-                    }, true, false, null, bodySelector, dragBarSelector, headerSelector);
-                }
-                btn.removeEventListener('click', onTabClick);
-                btn.addEventListener('click', onTabClick);
-            })
-            switch_pannel();
-            selector_numbers_addEvent(true);
-        }, true, false, null, bodySelector, dragBarSelector, headerSelector);
+            enhanceAllGradeTables();
+            insertSelectAllButton();
+            observeGradeTableChanges();
+        }, '.jqx-tabs-content', '#contenttabledqxq-index-table');
     }
 })();

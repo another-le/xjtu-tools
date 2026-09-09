@@ -1,7 +1,366 @@
-#wrapperdqxq-index-table .jqx-grid-column-header,
-#wrapperqb-index-table .jqx-grid-column-header {
-    cursor: default !important;
-    pointer-events: none !important;
+.xjtu-grade-course-cell {
+    position: relative;
+}
+
+.xjtu-grade-course-cell > span:first-child {
+    display: block;
+    box-sizing: border-box;
+    padding-right: 62px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.xjtu-grade-detail-btn {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    padding: 2px 5px;
+    transform: translateY(-50%);
+    border: 1px solid #d96a67;
+    border-radius: 4px;
+    background: #fff8f7;
+    color: #b52424;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+    cursor: pointer;
+}
+
+.xjtu-grade-detail-btn:hover,
+.xjtu-grade-detail-btn:focus-visible {
+    border-color: #bd2929;
+    background: #bd2929;
+    color: white;
+    outline: none;
+}
+
+.jqx-grid-table .jqx-grid-cell.xjtu-grade-operation-cell {
+    position: relative !important;
+    padding-right: 32px !important;
+}
+
+.xjtu-grade-inline-actions {
+    position: absolute;
+    top: 50%;
+    right: 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 1px;
+    width: 31px;
+    height: 18px;
+    margin: 0;
+    line-height: 1;
+    transform: translateY(-50%);
+}
+
+.xjtu-grade-select-checkbox {
+    order: 2;
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    accent-color: #c62828;
+    cursor: pointer;
+}
+
+.xjtu-grade-select-checkbox:disabled {
+    cursor: not-allowed;
+    opacity: 0.35;
+}
+
+.xjtu-grade-locate-btn {
+    display: inline-flex;
+    order: 1;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #c62828;
+    cursor: pointer;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.xjtu-grade-locate-icon {
+    display: block;
+    width: 13px;
+    height: 13px;
+    overflow: visible;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.xjtu-grade-locate-dot {
+    fill: currentColor;
+    stroke: none;
+}
+
+.xjtu-grade-select-checkbox:checked + .xjtu-grade-locate-btn {
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.xjtu-grade-locate-btn:hover,
+.xjtu-grade-locate-btn:focus-visible {
+    background: #fde9e7;
+    color: #9f1f1f;
+    outline: none;
+}
+
+.gh-course-detail-panel {
+    position: fixed;
+    width: min(420px, calc(100vw - 24px));
+    max-height: min(680px, calc(100vh - 32px));
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid rgba(121, 35, 35, 0.18);
+    border-radius: 14px;
+    background: #fffdfb;
+    box-shadow: 0 20px 52px rgba(55, 25, 22, 0.24), 0 3px 10px rgba(55, 25, 22, 0.1);
+    color: #302826;
+    font-family: "Microsoft YaHei UI", "PingFang SC", sans-serif;
+    font-size: 13px;
+    z-index: 1000000;
+}
+
+.gh-detail-panel-header {
+    box-sizing: border-box;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    min-height: 70px;
+    padding: 13px 15px 12px;
+    background: linear-gradient(135deg, #b82424 0%, #d63232 72%, #df4a42 100%);
+    color: white;
+    cursor: move;
+    flex: none;
+    user-select: none;
+}
+
+.gh-detail-panel-header > div {
+    min-width: 0;
+    flex: 1;
+}
+
+.gh-detail-eyebrow {
+    display: block;
+    margin-bottom: 3px;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+}
+
+.gh-detail-course-name {
+    display: -webkit-box;
+    margin: 0;
+    overflow: hidden;
+    color: white;
+    font-family: "STZhongsong", "Songti SC", "Microsoft YaHei UI", sans-serif;
+    font-size: 19px;
+    font-weight: 700;
+    line-height: 1.35;
+    letter-spacing: 0.02em;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.gh-detail-close {
+    width: 28px;
+    height: 28px;
+    flex: none;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.38);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+    font-size: 20px;
+    line-height: 24px;
+    cursor: pointer;
+}
+
+.gh-detail-close:hover,
+.gh-detail-close:focus-visible {
+    background: rgba(255, 255, 255, 0.26);
+    outline: none;
+}
+
+.gh-detail-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 14px;
+    border-bottom: 1px solid #eee2df;
+    background: #fff8f5;
+    color: #8c746f;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.gh-detail-code {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.gh-detail-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+    padding: 11px 13px;
+    border-bottom: 1px solid #eee5e2;
+    background: #fffdfb;
+}
+
+.gh-detail-summary > div {
+    min-width: 0;
+    padding: 7px 8px;
+    border: 1px solid #eadbd7;
+    border-radius: 7px;
+    background: white;
+}
+
+.gh-detail-summary span {
+    display: block;
+    color: #95807a;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.gh-detail-summary strong {
+    display: block;
+    margin-top: 2px;
+    overflow: hidden;
+    color: #b52525;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 18px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+}
+
+.gh-detail-fields {
+    min-height: 0;
+    padding: 2px 13px 10px;
+    overflow-y: auto;
+    scrollbar-color: #d6b6b1 transparent;
+    scrollbar-width: thin;
+}
+
+.gh-detail-fields::-webkit-scrollbar {
+    width: 7px;
+}
+
+.gh-detail-fields::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: #d6b6b1;
+    background-clip: padding-box;
+}
+
+.gh-detail-section {
+    margin-top: 10px;
+    overflow: hidden;
+    border: 1px solid #eadfdb;
+    border-radius: 9px;
+    background: white;
+}
+
+.gh-detail-section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-bottom: 1px solid #eee5e2;
+    background: linear-gradient(90deg, #faf2ef, #fffafa);
+}
+
+.gh-detail-section-heading h3 {
+    margin: 0;
+    color: #654d48;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.gh-detail-section-heading span {
+    color: #a18d87;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.gh-detail-section dl {
+    margin: 0;
+}
+
+.gh-detail-field-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(88px, 1.15fr);
+    gap: 12px;
+    align-items: center;
+    min-height: 38px;
+    padding: 7px 10px;
+    border-bottom: 1px solid #f2ebe8;
+}
+
+.gh-detail-field-row:last-child {
+    border-bottom: 0;
+}
+
+.gh-detail-field-row dt {
+    color: #87736e;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.45;
+}
+
+.gh-detail-field-row dd {
+    margin: 0;
+    color: #382e2b;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: right;
+    word-break: break-word;
+}
+
+.gh-detail-section[data-category="成绩构成"] .gh-detail-field-row dd {
+    color: #a32424;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+}
+
+.gh-detail-footer {
+    padding: 8px 13px;
+    border-top: 1px solid #eee2df;
+    background: #fff8f5;
+    color: #9a8580;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+}
+
+.gh-detail-panel-pulse {
+    animation: gh-detail-panel-pulse 0.32s ease;
+}
+
+@keyframes gh-detail-panel-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.015); }
 }
 
 .grade-helper-panel {
@@ -57,8 +416,8 @@
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.12);
     color: white;
-    font-size: 11px;
-    font-weight: normal;
+    font-size: 12px;
+    font-weight: 600;
     line-height: 1;
     text-decoration: none;
     transition: background 0.2s ease, border-color 0.2s ease;
@@ -190,17 +549,17 @@
     border: 1px solid #eadedb;
     border-radius: 5px;
     background: rgba(255, 255, 255, 0.82);
-    font-weight: normal;
+    font-weight: 600;
 }
 
 .gh-semester-stats small {
     color: #9a827d;
-    font-size: 10px;
+    font-size: 11px;
 }
 
 .gh-semester-stats strong {
     color: #9f2424;
-    font-size: 11px;
+    font-size: 12px;
     font-variant-numeric: tabular-nums;
 }
 
@@ -210,7 +569,8 @@
     color: #e57373;
     padding: 1px 5px;
     border-radius: 3px;
-    font-size: 11px;
+    font-size: 12px;
+    font-weight: 600;
     cursor: pointer;
     line-height: 1.4;
     white-space: nowrap;
@@ -246,7 +606,7 @@
 }
 
 .gh-table th:nth-child(1),
-.gh-table td:nth-child(1) { width: 47%; }  /* 课程名 */
+.gh-table td:nth-child(1) { width: 45%; }  /* 课程名 */
 
 .gh-table th:nth-child(2),
 .gh-table td:nth-child(2) { width: 13%; }  /* 学分 */
@@ -258,12 +618,59 @@
 .gh-table td:nth-child(4) { width: 12%; }  /* 绩点 */
 
 .gh-table th:nth-child(5),
-.gh-table td:nth-child(5) { width: 14%; }  /* 操作 */
+.gh-table td:nth-child(5) { width: 16%; }  /* 操作 */
 
 .gh-table td:first-child {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.gh-row-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+}
+
+.gh-row-actions button {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.5;
+    cursor: pointer;
+}
+
+.gh-row-detail {
+    color: #9c5f22;
+}
+
+.gh-row-delete {
+    color: #315bd6;
+}
+
+.gh-row-actions button:hover,
+.gh-row-actions button:focus-visible {
+    text-decoration: underline;
+    outline: none;
+}
+
+.gh-row-locate-flash td {
+    animation: gh-row-locate-flash 0.52s ease-in-out 2;
+}
+
+@keyframes gh-row-locate-flash {
+    0%, 100% {
+        background: transparent;
+        box-shadow: inset 0 1px 0 rgba(198, 40, 40, 0), inset 0 -1px 0 rgba(198, 40, 40, 0);
+    }
+    45% {
+        background: #ffc9c7;
+        box-shadow: inset 0 1px 0 rgba(198, 40, 40, 0.7), inset 0 -1px 0 rgba(198, 40, 40, 0.7);
+    }
 }
 
 .gh-row-warning {
@@ -439,7 +846,7 @@ a:hover {
     backdrop-filter: blur(3px);
     opacity: 0;
     transition: opacity 0.16s ease;
-    z-index: 1000001;
+    z-index: 1100000;
 }
 
 .gh-settings-overlay[hidden] {
