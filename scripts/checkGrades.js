@@ -428,6 +428,7 @@ console.log("Content Script 注入成功！");
     let selected_subjects = []
     let draggedSemesterGroup = null;
 
+    const TRANSCRIPT_PRINT_URL = 'https://dzpz.xjtu.edu.cn/wui/index.html?#/main/cs/app/de7bbe52b2684ad08df41d3043f07d80_Guide?mode=guide&id=29&menuId=2&_key=6pjdy6';
     const GRADE_SETTINGS_STORAGE_KEY = 'gradeHelperSettings';
     const DEFAULT_GRADE_SETTINGS = {
         rules: [
@@ -675,7 +676,10 @@ console.log("Content Script 注入成功！");
         panel.innerHTML = `
         <div class="gh-header">
             <span class="gh-header-title">成绩统计</span>
-            <button type="button" class="gh-settings-btn" aria-label="打开成绩统计设置" aria-expanded="false" title="成绩统计设置">⚙</button>
+            <div class="gh-header-actions">
+                <a class="gh-transcript-link" href="${TRANSCRIPT_PRINT_URL}" target="_blank" rel="noopener noreferrer" title="前往学校官网打印成绩单">打印成绩单 ↗</a>
+                <button type="button" class="gh-settings-btn" aria-label="打开成绩统计设置" aria-expanded="false" title="成绩统计设置">⚙</button>
+            </div>
         </div>
 
         <div class="gh-content">
@@ -683,9 +687,19 @@ console.log("Content Script 注入成功！");
         </div>
 
         <div class="gh-footer">
-            <div class="gh-footer-left">
-                平均分：<span class="gh-average">0.00</span>
-                平均绩点：<span class="gpa-average">0.00</span>
+            <div class="gh-footer-left" aria-label="所选课程汇总">
+                <div class="gh-summary-item">
+                    <span>总学分</span>
+                    <strong class="gh-total-credits">0</strong>
+                </div>
+                <div class="gh-summary-item">
+                    <span>平均分</span>
+                    <strong class="gh-average">0.00</strong>
+                </div>
+                <div class="gh-summary-item">
+                    <span>平均绩点</span>
+                    <strong class="gpa-average">0.00</strong>
+                </div>
             </div>
 
             <div class="gh-footer-actions">
@@ -985,9 +999,13 @@ console.log("Content Script 注入成功！");
         <div class="gh-group-title">
             <span class="gh-semester-drag-handle" draggable="true" title="拖动调整学期顺序" aria-label="拖动调整学期顺序">⋮⋮</span>
             <span class="gh-arrow">▼</span>
-            ${year}
-            <span class="gh-semester-avg">均分:0  均绩:0.00</span>
-            <button class="gh-semester-del">删除学期</button>
+            <span class="gh-semester-name">${year}</span>
+            <span class="gh-semester-stats" aria-label="本学期统计">
+                <span><small>学分</small><strong class="gh-semester-credits">0</strong></span>
+                <span><small>均分</small><strong class="gh-semester-score">0</strong></span>
+                <span><small>均绩</small><strong class="gh-semester-gpa">0.00</strong></span>
+            </span>
+            <button type="button" class="gh-semester-del">删除学期</button>
         </div>
 
         <table class="gh-table">
@@ -1118,8 +1136,13 @@ console.log("Content Script 注入成功！");
         calculateAverage();
     }
 
+    function formatCredits(credits) {
+        if (!Number.isFinite(credits)) return '0';
+        return credits.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+    }
+
     function calculateStats(rows) {
-        let totalScore = 0, scoreWeight = 0, totalGpa = 0, gpaWeight = 0;
+        let totalCredits = 0, totalScore = 0, scoreWeight = 0, totalGpa = 0, gpaWeight = 0;
         rows.forEach(row => {
             const credit = parseFloat(row.children[1].textContent) || 0;
             const scoreText = row.children[2].dataset.score;
@@ -1127,6 +1150,7 @@ console.log("Content Script 注入成功！");
             const score = scoreText === '' ? NaN : Number(scoreText);
             const gpa = gpaText.trim() === '' ? NaN : Number(gpaText);
             const weight = gradeSettings.averageMode === 'arithmetic' ? 1 : credit;
+            if (credit > 0) totalCredits += credit;
             if (Number.isFinite(score) && weight > 0) {
                 totalScore += weight * score;
                 scoreWeight += weight;
@@ -1137,6 +1161,7 @@ console.log("Content Script 注入成功！");
             }
         });
         return {
+            totalCredits: formatCredits(totalCredits),
             averageScore: scoreWeight ? (totalScore / scoreWeight).toFixed(gradeSettings.decimalPlaces) : (0).toFixed(gradeSettings.decimalPlaces),
             averageGpa: gpaWeight ? (totalGpa / gpaWeight).toFixed(gradeSettings.decimalPlaces) : (0).toFixed(gradeSettings.decimalPlaces),
         };
@@ -1166,14 +1191,19 @@ console.log("Content Script 注入成功！");
 
     function updateSemesterStats(group) {
         const stats = calculateStats(group.querySelectorAll('tbody tr'));
-        const display = group.querySelector('.gh-semester-avg');
-        if (display) display.textContent = `均分:${stats.averageScore}  均绩:${stats.averageGpa}`;
+        const credits = group.querySelector('.gh-semester-credits');
+        const score = group.querySelector('.gh-semester-score');
+        const gpa = group.querySelector('.gh-semester-gpa');
+        if (credits) credits.textContent = stats.totalCredits;
+        if (score) score.textContent = stats.averageScore;
+        if (gpa) gpa.textContent = stats.averageGpa;
     }
 
     function calculateAverage() {
         const rows = document.querySelectorAll('.gh-table tbody tr');
         const stats = calculateStats(rows);
 
+        document.querySelector('.gh-total-credits').textContent = stats.totalCredits;
         document.querySelector('.gh-average').textContent = stats.averageScore;
         document.querySelector('.gpa-average').textContent = stats.averageGpa;
 
@@ -1188,7 +1218,7 @@ console.log("Content Script 注入成功！");
         let dragging = false;
 
         header.addEventListener('mousedown', e => {
-            if (e.target.closest('button')) return;
+            if (e.target.closest('button, a')) return;
             dragging = true;
 
             offsetX = e.clientX - panel.offsetLeft;

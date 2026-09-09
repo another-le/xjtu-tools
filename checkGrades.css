@@ -6,12 +6,14 @@
 
 .grade-helper-panel {
     position: fixed;
-    right: 40px;
+    right: clamp(16px, 3vw, 40px);
     top: 120px;
-    width: 400px;
-    background: white;
-    border-radius: 10px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    width: min(540px, calc(100vw - 32px));
+    box-sizing: border-box;
+    border: 1px solid rgba(121, 35, 35, 0.12);
+    background: #fffdfc;
+    border-radius: 14px;
+    box-shadow: 0 14px 38px rgba(68, 28, 25, 0.2), 0 2px 8px rgba(68, 28, 25, 0.08);
     color: #25201f;
     font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
     font-size: 14px;
@@ -19,17 +21,17 @@
 }
 
 .gh-header {
-    border-radius: 10px 10px 0 0;
+    border-radius: 13px 13px 0 0;
 }
 
 .gh-footer {
-    border-radius: 0 0 10px 10px;
+    border-radius: 0 0 13px 13px;
 }
 
 .gh-header {
     background: #d22e2e;
     color: white;
-    padding: 10px;
+    padding: 10px 12px;
     font-weight: bold;
     cursor: move;
     display: flex;
@@ -41,6 +43,34 @@
 
 .gh-header-title {
     letter-spacing: 0.04em;
+}
+
+.gh-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.gh-transcript-link {
+    padding: 5px 9px;
+    border: 1px solid rgba(255, 255, 255, 0.42);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+    font-size: 11px;
+    font-weight: normal;
+    line-height: 1;
+    text-decoration: none;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.gh-transcript-link:hover,
+.gh-transcript-link:focus-visible {
+    border-color: rgba(255, 255, 255, 0.7);
+    background: rgba(255, 255, 255, 0.24);
+    color: white;
+    text-decoration: none;
+    outline: none;
 }
 
 .gh-settings-btn {
@@ -65,21 +95,41 @@
 }
 
 .gh-content {
-    padding: 10px;
+    padding: 12px;
     max-height: 400px;
     overflow-y: auto;
+    scrollbar-color: #d6b6b1 transparent;
+    scrollbar-width: thin;
+}
+
+.gh-content::-webkit-scrollbar {
+    width: 7px;
+}
+
+.gh-content::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: #d6b6b1;
+    background-clip: padding-box;
 }
 
 .gh-group {
-    margin-bottom: 10px;
-    border: 1px solid #eee;
-    border-radius: 6px;
+    margin-bottom: 12px;
+    border: 1px solid #eadfdd;
+    border-radius: 9px;
     overflow: hidden;
+    background: white;
+}
+
+.gh-group:last-child {
+    margin-bottom: 0;
 }
 
 .gh-group-title {
-    background: #f9f9f9;
-    padding: 6px 8px;
+    min-height: 46px;
+    box-sizing: border-box;
+    background: linear-gradient(90deg, #fbf6f4 0%, #fff 72%);
+    padding: 7px 9px;
     cursor: pointer;
     font-weight: bold;
     display: flex;
@@ -117,11 +167,41 @@
     color: #d22e2e;
 }
 
-.gh-semester-avg {
+.gh-semester-name {
+    min-width: 92px;
+    color: #352a28;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+
+.gh-semester-stats {
     margin-left: auto;
-    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+}
+
+.gh-semester-stats > span {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 3px;
+    padding: 3px 6px;
+    border: 1px solid #eadedb;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.82);
     font-weight: normal;
-    color: #888;
+}
+
+.gh-semester-stats small {
+    color: #9a827d;
+    font-size: 10px;
+}
+
+.gh-semester-stats strong {
+    color: #9f2424;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
 }
 
 .gh-semester-del {
@@ -133,6 +213,7 @@
     font-size: 11px;
     cursor: pointer;
     line-height: 1.4;
+    white-space: nowrap;
 }
 
 .gh-semester-del:hover {
@@ -147,15 +228,21 @@
 }
 
 .gh-table th {
-    background: #fafafa;
-    padding: 6px;
+    background: #fcfaf9;
+    padding: 8px 6px;
+    color: #655653;
+    font-size: 12px;
     text-align: center;
 }
 
 .gh-table td {
-    padding: 6px;
-    border-top: 1px solid #eee;
+    padding: 7px 6px;
+    border-top: 1px solid #f0e8e5;
     text-align: center;
+}
+
+.gh-table tbody tr:hover:not(.gh-row-warning):not(.gh-row-unmapped) {
+    background: #fff9f7;
 }
 
 .gh-table th:nth-child(1),
@@ -197,18 +284,42 @@
 }
 
 .gh-footer {
-    margin-top: 10px;
-    padding: 0 10px 10px;
-    display: flex;
-    justify-content: space-between;
+    margin-top: 0;
+    padding: 12px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
+    border-top: 1px solid #eee2df;
+    background: #fff8f6;
 }
 
 .gh-footer-left {
-    font-weight: bold;
-    color: #c62828;
-    white-space: nowrap;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+}
+
+.gh-summary-item {
+    min-width: 0;
+    padding: 6px 9px;
+    border: 1px solid #eadbd7;
+    border-radius: 7px;
+    background: white;
+    color: #8d7772;
+    font-size: 10px;
+    line-height: 1.2;
+}
+
+.gh-summary-item strong {
+    display: block;
+    margin-top: 2px;
+    overflow: hidden;
+    color: #bd2929;
+    font-size: 16px;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
 }
 
 .gh-footer-actions {
@@ -226,6 +337,7 @@
     font-size: 12px;
     cursor: pointer;
     transition: all 0.25s ease;
+    white-space: nowrap;
 }
 
 .gh-clear-btn:hover {
@@ -600,6 +712,32 @@ a:hover {
 }
 
 @media (max-width: 620px) {
+    .grade-helper-panel {
+        top: 72px;
+    }
+
+    .gh-group-title {
+        flex-wrap: wrap;
+    }
+
+    .gh-semester-name {
+        flex: 1;
+    }
+
+    .gh-semester-stats {
+        order: 2;
+        flex-basis: 100%;
+        margin: 2px 0 0 34px;
+    }
+
+    .gh-footer {
+        grid-template-columns: 1fr;
+    }
+
+    .gh-footer-actions {
+        justify-content: flex-end;
+    }
+
     .gh-settings-overlay {
         padding: 12px;
     }
