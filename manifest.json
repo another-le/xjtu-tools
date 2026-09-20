@@ -1,8 +1,9 @@
 {
-    "name": "xjtu tools",
-    "description": "an extentison convenient for xjtuers",
-    "version": "1.0",
+    "name": "XJTU Tools",
+    "description": "为西交学生提供成绩分析、教务辅助和学习资源下载功能。",
+    "version": "1.1",
     "permissions": [
+        "alarms",
         "cookies",
         "downloads",
         "notifications",
@@ -10,12 +11,16 @@
     ],
     "host_permissions": [
         "https://*.xjtu.edu.cn/*",
-        "http://*.xjtu.edu.cn/*"
+        "http://*.xjtu.edu.cn/*",
+        "https://api.github.com/repos/another-le/xjtu-tools/*"
     ],
     "author": "le",
     "manifest_version": 3,
+    "minimum_chrome_version": "127",
     "action": {
-        "default_icon": "icon.png"
+        "default_icon": "icon.png",
+        "default_popup": "popup.html",
+        "default_title": "XJTU Tools"
     },
     "background": {
         "service_worker": "scripts/background.js"
@@ -24,7 +29,8 @@
         "16": "icon.png",
         "32": "icon.png",
         "48": "icon.png",
-        "64": "icon.png"
+        "64": "icon.png",
+        "128": "icon.png"
     },
     "content_scripts": [
         {

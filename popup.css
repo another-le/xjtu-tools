@@ -1,0 +1,331 @@
+:root {
+  color-scheme: light;
+  --red: #d9363e;
+  --red-dark: #b6242d;
+  --green: #23845e;
+  --amber: #a35b12;
+  --ink: #202124;
+  --muted: #6f7378;
+  --border: #e4e6e8;
+  --surface: #f6f7f8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 344px;
+  margin: 0;
+}
+
+body {
+  color: var(--ink);
+  background: #fff;
+  font-family: Aptos, "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  font-size: 13px;
+}
+
+button {
+  font: inherit;
+}
+
+.popup-shell {
+  border-top: 3px solid var(--red);
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 15px 17px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.app-icon {
+  width: 38px;
+  height: 38px;
+  padding: 3px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+
+.app-heading {
+  min-width: 0;
+  flex: 1;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-family: Bahnschrift, Aptos, sans-serif;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.app-heading p {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.header-version {
+  padding: 3px 7px;
+  color: #555a60;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: Bahnschrift, Consolas, monospace;
+  font-size: 10px;
+}
+
+.content {
+  padding: 18px 17px 16px;
+}
+
+.status-heading {
+  display: grid;
+  grid-template-columns: 10px 1fr;
+  gap: 9px;
+  align-items: start;
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  background: #aeb3b8;
+  border-radius: 50%;
+}
+
+.status-indicator.is-loading {
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.status-indicator.has-update {
+  background: var(--red);
+}
+
+.status-indicator.is-current {
+  background: var(--green);
+}
+
+.status-indicator.has-error {
+  background: var(--amber);
+}
+
+h2 {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.status-heading p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.version-row {
+  display: grid;
+  grid-template-columns: 1fr 24px 1fr;
+  align-items: center;
+  margin-top: 16px;
+  padding: 11px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.version-row > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.version-row span:not(.version-arrow) {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.version-row strong {
+  font-family: Bahnschrift, Consolas, monospace;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.version-arrow {
+  color: #a0a4a8;
+  text-align: center;
+}
+
+.version-latest {
+  text-align: right;
+}
+
+.primary-button,
+.retry-button {
+  width: 100%;
+  margin-top: 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.primary-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  color: #fff;
+  background: var(--red);
+  border: 1px solid var(--red);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.primary-button:hover {
+  background: var(--red-dark);
+  border-color: var(--red-dark);
+}
+
+.retry-button {
+  padding: 9px 12px;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--border);
+}
+
+.retry-button:hover {
+  background: var(--surface);
+}
+
+.reminder-option {
+  display: grid;
+  grid-template-columns: 17px 1fr;
+  gap: 9px;
+  align-items: start;
+  margin-top: 13px;
+  padding: 10px 11px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.reminder-option:hover {
+  background: #fafafa;
+}
+
+.reminder-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.checkmark {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  background: white;
+  border: 1px solid #b7bbc0;
+  border-radius: 4px;
+}
+
+.reminder-option input:checked + .checkmark {
+  background: var(--red);
+  border-color: var(--red);
+}
+
+.reminder-option input:checked + .checkmark::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 5px;
+  height: 8px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.reminder-option input:focus-visible + .checkmark {
+  outline: 2px solid rgba(217, 54, 62, 0.28);
+  outline-offset: 2px;
+}
+
+.reminder-option.is-saving {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.reminder-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.reminder-copy strong {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.reminder-copy small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.app-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 17px;
+  color: #85898e;
+  background: #fafafa;
+  border-top: 1px solid var(--border);
+  font-size: 9.5px;
+}
+
+.app-footer button {
+  padding: 2px 0;
+  color: #575b60;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.app-footer button:hover {
+  color: var(--red);
+}
+
+button:focus-visible {
+  outline: 2px solid rgba(217, 54, 62, 0.3);
+  outline-offset: 2px;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-indicator {
+    animation: none !important;
+  }
+}

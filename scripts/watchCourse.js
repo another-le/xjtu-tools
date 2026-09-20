@@ -5,14 +5,15 @@ console.log('[选课盯盘] 🟢 脚本已加载(', new Date().toLocaleTimeStrin
  *
  * 工作方式：
  *   1. 课程行旁加 "盯住" 按钮，教学班卡片旁加小眼睛 👁️
- *   2. 点击后先查当前余量，有余量则提示，满了才加入盯盘
- *   3. 后台按 API 路径分组查询，发现余量从 0→>0 时通知
+ *   2. 点击后先查当前余量，有余量则直接尝试选课，满了才加入盯盘
+ *   3. 后台按 API 路径分组查询，发现余量后自动提交选课并确认处理结果
  *   4. 关闭页面前弹窗确认
  */
 
 const CONFIG = {
   BASE_URL: 'https://xkfw.xjtu.edu.cn',
   CHECK_INTERVAL: 30000,
+  AUTO_RETRY_INTERVAL: 30000,
   // tab 类型 → API 路径（从 xsxkpub.js 源码确认）
   API_MAP: {
     TJKC:  '/xsxkapp/sys/xsxkapp/elective/recommendedCourse.do',
@@ -30,11 +31,19 @@ let checkTimer = null;
 let watchPanel = null;
 let watchPanelVisible = false;
 let removedStack = [];
+let checkInProgress = false;
+const autoSelecting = new Set();
+let pageRefreshTimer = null;
 
 // ======================== 日志 ========================
 function log(...args) { console.log('[选课盯盘]', ...args); }
 function warn(...args) { console.warn('[选课盯盘]', ...args); }
 function error(...args) { console.error('[选课盯盘]', ...args); }
+
+function refreshPageAfterSelection() {
+  if (pageRefreshTimer) return;
+  pageRefreshTimer = setTimeout(() => location.reload(), 1200);
+}
 
 // ======================== 工具 ========================
 function getToken() {
@@ -83,11 +92,12 @@ function getCurrentApiPath() {
 }
 
 // ======================== API ========================
-async function fetchCourses(apiPath) {
+async function fetchCourses(apiPath, teachingClassType) {
   const token = getToken();
   if (!token) { log('⚠️ 无 token'); return null; }
 
   const params = getCourseParams();
+  if (teachingClassType) params.teachingClassType = teachingClassType;
   const querySetting = JSON.stringify({
     data: {
       studentCode: params.studentCode, campus: params.campus,
@@ -117,6 +127,181 @@ async function fetchCourses(apiPath) {
     if (!text || text.trim().startsWith('<')) { warn('返回 HTML'); return null; }
     return JSON.parse(text);
   } catch (err) { error(err.message); return null; }
+}
+
+async function postForm(path, data) {
+  const token = getToken();
+  if (!token) return { code: '-1', msg: '登录状态已失效，请重新登录选课系统' };
+
+  try {
+    const resp = await fetch(CONFIG.BASE_URL + path, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        'token': token,
+        'Referer': location.href
+      },
+      body: new URLSearchParams(data).toString()
+    });
+    const text = await resp.text();
+    if (!resp.ok) return { code: '-1', msg: '请求失败（HTTP ' + resp.status + '）' };
+    if (!text || text.trim().startsWith('<')) return { code: '-1', msg: '登录状态已失效，请重新登录选课系统' };
+    return JSON.parse(text);
+  } catch (err) {
+    return { code: '-1', msg: err.message || '网络请求失败' };
+  }
+}
+
+async function fetchTeachingClassCapacity(teachingClassID, capacitySuffix) {
+  const token = getToken();
+  const studentCode = getCourseParams().studentCode;
+  if (!token || !studentCode || !teachingClassID) return null;
+
+  const query = new URLSearchParams({
+    teachingClassId: teachingClassID,
+    capacitySuffix: capacitySuffix || '',
+    xh: studentCode,
+    timestamp: String(Date.now())
+  });
+
+  try {
+    const resp = await fetch(
+      CONFIG.BASE_URL + '/xsxkapp/sys/xsxkapp/elective/teachingclass/capacity.do?' + query,
+      {
+        method: 'GET',
+        cache: 'no-store',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'token': token,
+          'Referer': location.href
+        }
+      }
+    );
+    const text = await resp.text();
+    if (!resp.ok || !text || text.trim().startsWith('<')) return null;
+    const result = JSON.parse(text);
+    return String(result.code ?? '') === '1' ? result.data : null;
+  } catch (err) {
+    warn('实时容量查询失败:', teachingClassID, err.message);
+    return null;
+  }
+}
+
+function getTeachingClassCandidates(found, watched) {
+  let classes = [];
+  if (Array.isArray(watched.teachingClasses) && watched.teachingClasses.length) {
+    classes = watched.teachingClasses;
+  } else if (Array.isArray(found?.tcList) && found.tcList.length) {
+    classes = found.tcList;
+  } else if (found?.teachingClassID) {
+    classes = [found];
+  } else if (watched.teachingClassID) {
+    classes = [{
+      teachingClassID: watched.teachingClassID,
+      teacherName: watched.teacherName || '',
+      capacitySuffix: watched.capacitySuffix || ''
+    }];
+  }
+
+  if (watched.type === 'teacher') {
+    classes = classes.filter(tc => tc.teachingClassID === watched.teachingClassID);
+  }
+  return classes;
+}
+
+async function getLiveAvailability(found, watched) {
+  const classes = getTeachingClassCandidates(found, watched);
+  let available = 0;
+  let firstAvailable = null;
+
+  for (const tc of classes) {
+    const live = await fetchTeachingClassCapacity(tc.teachingClassID, tc.capacitySuffix);
+    const source = live || tc;
+    const capacity = parseInt(source.classCapacity || 0);
+    const selected = parseInt(source.numberOfSelected || 0);
+    const remaining = Math.max(0, capacity - selected);
+    available += remaining;
+    if (!firstAvailable && remaining > 0) {
+      firstAvailable = { ...tc, ...live, teachingClassID: tc.teachingClassID };
+    }
+  }
+
+  return { available, teachingClass: firstAvailable, classCount: classes.length };
+}
+
+function getAvailableTeachingClass(found, watched) {
+  if (!found) return null;
+  const classes = Array.isArray(found.tcList) && found.tcList.length ? found.tcList : [found];
+  return classes.find(tc => {
+    if (watched.type === 'teacher' && tc.teachingClassID !== watched.teachingClassID) return false;
+    const cap = parseInt(tc.classCapacity || 0);
+    const selected = parseInt(tc.numberOfSelected || 0);
+    return Boolean(tc.teachingClassID) && cap > selected;
+  }) || null;
+}
+
+function getAutoSelectContext(course) {
+  let studentInfo = {}, currentCampus = {}, currentBatch = {};
+  try { studentInfo = JSON.parse(sessionStorage.getItem('studentInfo') || '{}'); } catch (e) {}
+  try { currentCampus = JSON.parse(sessionStorage.getItem('currentCampus') || '{}'); } catch (e) {}
+  try { currentBatch = JSON.parse(sessionStorage.getItem('currentBatch') || '{}'); } catch (e) {}
+
+  return {
+    studentCode: studentInfo.code || '',
+    electiveBatchCode: studentInfo.electiveBatch?.code || currentBatch.code || '',
+    campus: currentCampus.code || studentInfo.campus || '1',
+    teachingClassType: course.teachingClassType || getCourseParams().teachingClassType
+  };
+}
+
+async function waitForSelectResult(studentCode) {
+  for (let i = 0; i < 10; i++) {
+    const result = await postForm('/xsxkapp/sys/xsxkapp/elective/studentstatus.do', { studentCode });
+    const code = String(result.code ?? '');
+    if (code === '1' || code === '-1' || code === '302') return result;
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  return { code: '-1', msg: '选课请求处理超时，请在已选课程中确认结果' };
+}
+
+async function autoSelectCourse(course, teachingClass) {
+  if (!teachingClass?.teachingClassID || autoSelecting.has(course._id)) return null;
+  autoSelecting.add(course._id);
+  course.selecting = true;
+  refreshWatchPanel();
+
+  try {
+    const ctx = getAutoSelectContext(course);
+    if (!ctx.studentCode || !ctx.electiveBatchCode) {
+      return { success: false, message: '缺少学生或选课轮次信息，请刷新页面后重试' };
+    }
+
+    const addParam = JSON.stringify({
+      data: {
+        operationType: '1',
+        studentCode: ctx.studentCode,
+        electiveBatchCode: ctx.electiveBatchCode,
+        teachingClassId: teachingClass.teachingClassID,
+        isMajor: '1',
+        campus: String(ctx.campus),
+        teachingClassType: ctx.teachingClassType
+      }
+    });
+    const accepted = await postForm('/xsxkapp/sys/xsxkapp/elective/volunteer.do', { addParam });
+    if (String(accepted.code ?? '') !== '1') {
+      return { success: false, message: accepted.msg || '教务系统未接受选课请求' };
+    }
+
+    const result = await waitForSelectResult(ctx.studentCode);
+    return {
+      success: String(result.code ?? '') === '1',
+      message: result.msg || (String(result.code ?? '') === '1' ? '选课成功' : '选课失败')
+    };
+  } finally {
+    autoSelecting.delete(course._id);
+    course.selecting = false;
+  }
 }
 
 function parseCourseList(apiData) {
@@ -172,90 +357,127 @@ function getCourseAvailability(item) {
 
 // ======================== 盯盘检查 ========================
 async function checkWatchedCourses() {
+  if (checkInProgress) return;
   if (watchedCourses.length === 0) {
     log('⏹️ 盯盘列表为空');
     stopMonitoring();
     return;
   }
 
-  log('🔍 检查 ' + watchedCourses.length + ' 门盯住课程...');
+  checkInProgress = true;
 
-  // 按 API 路径分组
-  const groups = {};
-  for (const c of watchedCourses) {
-    const p = c.apiPath || CONFIG.DEFAULT_API;
-    if (!groups[p]) groups[p] = [];
-    groups[p].push(c);
-  }
+  try {
+    log('🔍 检查 ' + watchedCourses.length + ' 门盯住课程...');
 
-  let changes = [];
-
-  for (const [apiPath, courses] of Object.entries(groups)) {
-    const apiData = await fetchCourses(apiPath);
-    const list = parseCourseList(apiData);
-    if (list.length === 0) {
-      log('⚠️ ' + apiPath + ' 无数据');
-      continue;
+    // 同一路径也可能承载不同教学班类型，查询参数必须分别保存。
+    const groups = {};
+    for (const c of watchedCourses) {
+      const p = c.apiPath || CONFIG.DEFAULT_API;
+      const type = c.teachingClassType || getCourseParams().teachingClassType;
+      const key = p + '::' + type;
+      if (!groups[key]) groups[key] = { apiPath: p, teachingClassType: type, courses: [] };
+      groups[key].courses.push(c);
     }
 
-    for (const course of courses) {
-      let found;
-      if (course.type === 'teacher') {
-        // 教师级：同时匹配课程号和教学班 ID（因为同一门课可能有多行）
-        found = list.find(item =>
-          getCourseNumber(item) === course.courseNumber &&
-          (item.teachingClassID === course.teachingClassID ||
-           (item.tcList && item.tcList.some(t => t.teachingClassID === course.teachingClassID)))
-        );
-      } else {
-        found = list.find(item => getCourseNumber(item) === course.courseNumber);
-      }
-      if (!found) {
-        log('  - ' + course.name + ': 未找到');
-        continue;
+    let changes = [];
+    let selectionSucceeded = false;
+
+    for (const group of Object.values(groups)) {
+      const apiData = await fetchCourses(group.apiPath, group.teachingClassType);
+      const list = parseCourseList(apiData);
+      if (list.length === 0) {
+        log('⚠️ ' + group.apiPath + ' 无数据');
       }
 
-      let currentAvailable = 0;
-      if (course.type === 'teacher') {
-        // 先试 tcList 内查找
-        let tc = found.tcList?.find(t => t.teachingClassID === course.teachingClassID);
-        // 没找到则看 item 自身是不是就是那个教学班
-        if (!tc && found.teachingClassID === course.teachingClassID) {
-          tc = {
-            classCapacity: found.classCapacity,
-            numberOfSelected: found.numberOfSelected
-          };
+      for (const course of group.courses) {
+        let found;
+        if (course.type === 'teacher') {
+          // 教师级：同时匹配课程号和教学班 ID（因为同一门课可能有多行）
+          found = list.find(item =>
+            getCourseNumber(item) === course.courseNumber &&
+            (item.teachingClassID === course.teachingClassID ||
+             (item.tcList && item.tcList.some(t => t.teachingClassID === course.teachingClassID)))
+          );
+        } else {
+          found = list.find(item => getCourseNumber(item) === course.courseNumber);
         }
-        if (tc) currentAvailable = Math.max(0, parseInt(tc.classCapacity||0) - parseInt(tc.numberOfSelected||0));
-        else { log('  - ' + course.name + ': 未找到教学班'); continue; }
-      } else {
-        currentAvailable = getCourseAvailability(found).available;
-      }
+        if (!found && course.type !== 'teacher' && !course.teachingClasses?.length) {
+          log('  - ' + course.name + ': 未找到');
+          continue;
+        }
 
-      log('  - ' + course.name + ': 上次=' + course.lastAvailable + ' 当前=' + currentAvailable);
+        if (course.type === 'course' && (!course.teachingClasses || !course.teachingClasses.length)) {
+          course.teachingClasses = getTeachingClassCandidates(found, course).map(tc => ({
+            teachingClassID: tc.teachingClassID,
+            teacherName: tc.teacherName || '',
+            capacitySuffix: tc.capacitySuffix || ''
+          }));
+        }
 
-      if (currentAvailable !== course.lastAvailable) {
-        if (course.lastAvailable === 0 && currentAvailable > 0) {
-          changes.push({ courseNumber: course.courseNumber, name: course.name, available: currentAvailable });
-          notifySpotFound(course, currentAvailable);
-          // 发现余量后刷新页面，让用户看到最新数据
-          setTimeout(() => location.reload(), 300);
+        const liveState = await getLiveAvailability(found, course);
+        if (liveState.classCount === 0) {
+          log('  - ' + course.name + ': 未找到教学班');
+          continue;
+        }
+        const currentAvailable = liveState.available;
+
+        log('  - ' + course.name + ': 上次=' + course.lastAvailable + ' 当前=' + currentAvailable);
+
+        const wasUnavailable = !course.lastAvailable || course.lastAvailable <= 0;
+        const retryReady = !course.lastAutoAttempt ||
+          Date.now() - course.lastAutoAttempt >= CONFIG.AUTO_RETRY_INTERVAL;
+
+        if (currentAvailable > 0 && retryReady) {
+          if (wasUnavailable) {
+            changes.push({ courseNumber: course.courseNumber, name: course.name, available: currentAvailable });
+          }
+          course.lastAutoAttempt = Date.now();
+          log('🚀 发现名额，自动选课: ' + course.name);
+          const result = await autoSelectCourse(course, liveState.teachingClass);
+          if (result?.success) {
+            watchedCourses = watchedCourses.filter(item => item._id !== course._id);
+            removeWatchFromPage(course);
+            await saveToStorage();
+            showTip('「' + course.name + '」已自动选课成功', 'success');
+            notifyAutoSelectResult(course, true, result.message);
+            log('✅ 自动选课成功: ' + course.name);
+            selectionSucceeded = true;
+          } else {
+            const message = result?.message || '未找到可选教学班';
+            if (wasUnavailable || course.lastFailureMessage !== message) {
+              showTip('「' + course.name + '」自动选课失败：' + message, 'error');
+              notifyAutoSelectResult(course, false, message);
+            }
+            course.lastFailureMessage = message;
+            warn('自动选课失败: ' + course.name, message);
+          }
+        }
+        if (currentAvailable <= 0) {
+          course.lastAutoAttempt = 0;
+          course.lastFailureMessage = '';
         }
         course.lastAvailable = currentAvailable;
         course.lastChecked = Date.now();
       }
     }
-  }
 
-  await saveToStorage();
-  if (changes.length > 0) log('🎉 ' + changes.length + ' 门课出现名额！');
+    await saveToStorage();
+    refreshWatchPanel();
+    if (watchedCourses.length === 0) stopMonitoring();
+    if (changes.length > 0) log('🎉 ' + changes.length + ' 门课出现名额并已尝试自动选课');
+    if (selectionSucceeded) refreshPageAfterSelection();
+  } finally {
+    checkInProgress = false;
+  }
 }
 
 // ======================== 通知 ========================
-function notifySpotFound(course, available) {
+function notifyAutoSelectResult(course, success, message) {
   chrome.runtime.sendMessage({
-    action: 'courseSpotFound',
-    course: { courseNumber: course.courseNumber, name: course.name, available }
+    action: 'courseAutoSelectResult',
+    course: { courseNumber: course.courseNumber, name: course.name },
+    success,
+    message
   });
 }
 
@@ -295,12 +517,12 @@ function addButtonToRow(row) {
   if (!num || !nameEl) return;
 
   const name = nameEl.textContent.trim();
-  const watching = watchedCourses.some(c => c.courseNumber === num);
+  const watching = watchedCourses.some(c => c.type === 'course' && c.courseNumber === num);
 
   const btn = document.createElement('span');
   btn.className = 'watch-btn';
   btn.textContent = watching ? '👁️盯住中' : '👁️盯住';
-  btn.style.cssText = 'cursor:pointer;font-size:12px;margin-left:auto;margin-right:50px;' +
+  btn.style.cssText = 'cursor:pointer;font-size:12px;margin-left:12px;vertical-align:middle;' +
     'padding:1px 6px;border-radius:4px;border:1px solid ' + (watching ? '#047ADC' : '#ccc') + ';' +
     'background:' + (watching ? '#E8F4FD' : '#f5f5f5') + ';' +
     'color:' + (watching ? '#047ADC' : '#666') + ';user-select:none;white-space:nowrap;display:inline-block;line-height:1.8;';
@@ -309,7 +531,8 @@ function addButtonToRow(row) {
   btn.onmouseleave = () => { if (btn.dataset.watching !== 'true') { btn.style.borderColor = '#ccc'; btn.style.color = '#666'; } };
   btn.onclick = async (e) => { e.stopPropagation(); await toggleWatch(btn, num, name); };
 
-  nameEl.parentNode.appendChild(btn);
+  const actionCell = row.querySelector('.cv-credit-col') || row.lastElementChild;
+  actionCell.appendChild(btn);
 }
 
 function addTeacherWatchBtn(card) {
@@ -369,7 +592,7 @@ function addPublicTeacherBtn(row) {
 // ======================== 核心操作 ========================
 async function toggleWatch(btn, courseNumber, courseName) {
   if (btn.dataset.watching === 'true') {
-    watchedCourses = watchedCourses.filter(c => c.courseNumber !== courseNumber);
+    watchedCourses = watchedCourses.filter(c => !(c.type === 'course' && c.courseNumber === courseNumber));
     await saveToStorage();
     btn.textContent = '👁️盯住'; btn.style.background = '#f5f5f5'; btn.style.borderColor = '#ccc'; btn.style.color = '#666';
     btn.dataset.watching = 'false';
@@ -380,31 +603,42 @@ async function toggleWatch(btn, courseNumber, courseName) {
   }
 
   // 先查余量
-  const apiData = await fetchCourses(getCurrentApiPath());
+  const teachingClassType = getCourseParams().teachingClassType;
+  const apiData = await fetchCourses(getCurrentApiPath(), teachingClassType);
   const list = parseCourseList(apiData);
   const found = list.find(item => getCourseNumber(item) === courseNumber);
 
   if (found) {
-    const { available, tcList } = getCourseAvailability(found);
-    if (available > 0) {
-      let msg = '「' + courseName + '」当前还有名额，无需盯盘 🟢';
-      if (tcList && tcList.length > 1) {
-        msg += '\n共 ' + tcList.length + ' 个班，有余位的班：';
-        tcList.filter(t => t.available > 0).slice(0, 3).forEach(t => {
-          msg += '\n  · ' + t.teacher + '（余 ' + t.available + '/' + t.capacity + '）';
-        });
-      } else {
-        msg += '\n直接选课即可';
-      }
-      showTip(msg, 'info');
-      return;
+    const temporary = {
+      _id: 'now-' + Date.now(), type: 'course', courseNumber, name: courseName,
+      teachingClassType, apiPath: getCurrentApiPath(),
+      teachingClasses: getTeachingClassCandidates(found, { type: 'course' }).map(tc => ({
+        teachingClassID: tc.teachingClassID,
+        teacherName: tc.teacherName || '',
+        capacitySuffix: tc.capacitySuffix || ''
+      }))
+    };
+    const liveState = await getLiveAvailability(found, temporary);
+    if (liveState.available > 0) {
+      showTip('「' + courseName + '」当前有名额，正在自动选课…', 'info');
+      const result = await autoSelectCourse(temporary, liveState.teachingClass);
+      showTip(result?.success ? '「' + courseName + '」已自动选课成功' :
+        '「' + courseName + '」自动选课失败：' + (result?.message || '未找到可选教学班'),
+        result?.success ? 'success' : 'error');
+      notifyAutoSelectResult(temporary, Boolean(result?.success), result?.message || '');
+      if (result?.success) { refreshPageAfterSelection(); return; }
     }
   }
 
   watchedCourses.push({
     _id: Date.now() + Math.random().toString(36).slice(2,6),
-    type: 'course', apiPath: getCurrentApiPath(),
+    type: 'course', apiPath: getCurrentApiPath(), teachingClassType,
     courseNumber, name: courseName, lastAvailable: 0,
+    teachingClasses: getTeachingClassCandidates(found, { type: 'course' }).map(tc => ({
+      teachingClassID: tc.teachingClassID,
+      teacherName: tc.teacherName || '',
+      capacitySuffix: tc.capacitySuffix || ''
+    })),
     lastChecked: Date.now(), addedAt: Date.now()
   });
   await saveToStorage();
@@ -427,30 +661,38 @@ async function toggleTeacherWatch(btn, tcid, courseNumber, courseName, teacherNa
     return;
   }
 
-  const apiData = await fetchCourses(getCurrentApiPath());
+  const teachingClassType = getCourseParams().teachingClassType;
+  const apiData = await fetchCourses(getCurrentApiPath(), teachingClassType);
   const list = parseCourseList(apiData);
   // 教师级：同时匹配课程号和教学班 ID（因为同一门课可能有多行）
   let course = list.find(c =>
     getCourseNumber(c) === courseNumber &&
     (c.teachingClassID === tcid || (c.tcList && c.tcList.some(t => t.teachingClassID === tcid)))
   );
-  let available = 0;
-  if (course?.tcList) {
-    const tc = course.tcList.find(t => t.teachingClassID === tcid);
-    if (tc) available = Math.max(0, parseInt(tc.classCapacity||0) - parseInt(tc.numberOfSelected||0));
-  } else if (course) {
-    available = Math.max(0, parseInt(course.classCapacity||0) - parseInt(course.numberOfSelected||0));
-  }
-  if (available > 0) {
-    log('✅ ' + label + ' 有余量 ' + available);
-    showTip('「' + label + '」当前还有 ' + available + ' 个名额，不用盯', 'info');
-        return;
+  const matchedClass = course?.tcList?.find(t => t.teachingClassID === tcid) ||
+    (course?.teachingClassID === tcid ? course : null);
+  const temporary = {
+    _id: 'now-' + Date.now(), type: 'teacher', courseNumber, teachingClassID: tcid,
+    teacherName, name: label, teachingClassType, apiPath: getCurrentApiPath(),
+    capacitySuffix: matchedClass?.capacitySuffix || ''
+  };
+  const liveState = await getLiveAvailability(course, temporary);
+  if (liveState.available > 0) {
+    log('✅ ' + label + ' 有余量 ' + liveState.available);
+    showTip('「' + label + '」当前有名额，正在自动选课…', 'info');
+    const result = await autoSelectCourse(temporary, liveState.teachingClass);
+    showTip(result?.success ? '「' + label + '」已自动选课成功' :
+      '「' + label + '」自动选课失败：' + (result?.message || '未找到可选教学班'),
+      result?.success ? 'success' : 'error');
+    notifyAutoSelectResult(temporary, Boolean(result?.success), result?.message || '');
+    if (result?.success) { refreshPageAfterSelection(); return; }
   }
 
   watchedCourses.push({
     _id: Date.now() + Math.random().toString(36).slice(2,6),
-    type: 'teacher', apiPath: getCurrentApiPath(),
+    type: 'teacher', apiPath: getCurrentApiPath(), teachingClassType,
     courseNumber, teachingClassID: tcid, teacherName, name: label,
+    capacitySuffix: matchedClass?.capacitySuffix || '',
     lastAvailable: 0, lastChecked: Date.now(), addedAt: Date.now()
   });
   await saveToStorage();
@@ -467,7 +709,11 @@ function handleBeforeUnload(e) {
 
 // ======================== 提示条 ========================
 function showTip(msg, type) {
-  const colors = { info: { bg: '#E8F4FD', border: '#047ADC', text: '#1a1a1a' } };
+  const colors = {
+    info: { bg: '#E8F4FD', border: '#047ADC', text: '#1a1a1a' },
+    success: { bg: '#ECFDF3', border: '#16A34A', text: '#166534' },
+    error: { bg: '#FEF2F2', border: '#DC2626', text: '#991B1B' }
+  };
   const c = colors[type] || colors.info;
   const tip = document.createElement('div');
   tip.style.cssText = 'position:fixed;top:60px;right:20px;z-index:999999;max-width:420px;min-width:280px;' +
@@ -572,7 +818,8 @@ function refreshWatchPanel() {
     html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid #f0efec;">' +
       '<div style="flex:1;min-width:0;"><div style="font-weight:500;font-size:13px;">' + c.name + '</div>' +
       '<div style="font-size:11px;color:#888;">' + (isT ? '👨‍🏫 ' : '📚 ') + (isT ? c.teacherName : '所有教师') +
-      '<span style="margin-left:6px;color:' + (c.lastAvailable > 0 ? '#0d9488' : '#b0afab') + ';">余' + c.lastAvailable + '</span></div></div>' +
+      '<span style="margin-left:6px;color:' + (c.selecting ? '#047ADC' : (c.lastAvailable > 0 ? '#0d9488' : '#b0afab')) + ';">' +
+      (c.selecting ? '正在自动选课…' : '余' + c.lastAvailable) + '</span></div></div>' +
       '<button data-id="' + c._id + '" style="flex-shrink:0;padding:2px 10px;font-size:12px;border:1px solid #e2e1dc;border-radius:6px;background:#fff;cursor:pointer;color:#dc2626;">删除</button></div>';
   });
 
@@ -595,7 +842,12 @@ function refreshWatchPanel() {
       const c = watchedCourses.find(w => w._id === btn.dataset.id);
       if (!c) return;
       removeWatchFromPage(c);
-      removedStack.unshift({ _id: c._id, type: c.type, courseNumber: c.courseNumber, teachingClassID: c.teachingClassID, teacherName: c.teacherName, name: c.name });
+      removedStack.unshift({
+        _id: c._id, type: c.type, courseNumber: c.courseNumber,
+        teachingClassID: c.teachingClassID, teacherName: c.teacherName, name: c.name,
+        teachingClasses: c.teachingClasses, capacitySuffix: c.capacitySuffix,
+        apiPath: c.apiPath, teachingClassType: c.teachingClassType
+      });
       if (removedStack.length > 20) removedStack.pop();
       watchedCourses = watchedCourses.filter(w => w._id !== c._id);
       await saveToStorage(); await saveRemovedStack();
@@ -611,7 +863,9 @@ function refreshWatchPanel() {
       const item = removedStack[idx];
       removedStack.splice(idx, 1);
 
-      const apiData = await fetchCourses(getCurrentApiPath());
+      const apiPath = item.apiPath || getCurrentApiPath();
+      const teachingClassType = item.teachingClassType || getCourseParams().teachingClassType;
+      const apiData = await fetchCourses(apiPath, teachingClassType);
       const list = parseCourseList(apiData);
       let available = 0;
       if (item.type === 'teacher') {
@@ -628,9 +882,31 @@ function refreshWatchPanel() {
         const course = list.find(c => getCourseNumber(c) === item.courseNumber);
         if (course?.tcList) available = course.tcList.reduce((s, t) => s + Math.max(0, parseInt(t.classCapacity||0) - parseInt(t.numberOfSelected||0)), 0);
       }
-      if (available > 0) { showTip('「' + item.name + '」当前还有 ' + available + ' 个名额，无需盯盘', 'info'); await saveRemovedStack(); refreshWatchPanel(); return; }
+      if (available > 0) {
+        const found = list.find(c => getCourseNumber(c) === item.courseNumber &&
+          (item.type !== 'teacher' || c.teachingClassID === item.teachingClassID ||
+           (c.tcList && c.tcList.some(t => t.teachingClassID === item.teachingClassID))));
+        const pending = { ...item, apiPath, teachingClassType };
+        showTip('「' + item.name + '」当前有名额，正在自动选课…', 'info');
+        const result = await autoSelectCourse(pending, getAvailableTeachingClass(found, pending));
+        showTip(result?.success ? '「' + item.name + '」已自动选课成功' :
+          '「' + item.name + '」自动选课失败：' + (result?.message || '未找到可选教学班'),
+          result?.success ? 'success' : 'error');
+        notifyAutoSelectResult(pending, Boolean(result?.success), result?.message || '');
+        if (result?.success) {
+          await saveRemovedStack();
+          refreshWatchPanel();
+          refreshPageAfterSelection();
+          return;
+        }
+      }
 
-      watchedCourses.push({ _id: item._id, type: item.type, courseNumber: item.courseNumber, teachingClassID: item.teachingClassID, teacherName: item.teacherName, name: item.name, lastAvailable: 0, lastChecked: Date.now(), addedAt: Date.now() });
+      watchedCourses.push({
+        _id: item._id, type: item.type, courseNumber: item.courseNumber,
+        teachingClassID: item.teachingClassID, teacherName: item.teacherName, name: item.name,
+        teachingClasses: item.teachingClasses, capacitySuffix: item.capacitySuffix,
+        apiPath, teachingClassType, lastAvailable: 0, lastChecked: Date.now(), addedAt: Date.now()
+      });
       await saveToStorage(); await saveRemovedStack();
       if (item.type === 'teacher') {
         document.querySelectorAll('.watch-btn-teacher').forEach(el => { if (el.closest('[id]')?.id?.replace('_courseDiv', '') === item.teachingClassID) { el.dataset.watching = 'true'; el.style.opacity = '1'; el.title = '已盯住 ' + item.teacherName; } });

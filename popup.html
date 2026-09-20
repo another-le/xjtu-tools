@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XJTU Tools</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="popup-shell">
+    <header class="app-header">
+      <img src="icon.png" alt="" class="app-icon">
+      <div class="app-heading">
+        <h1>XJTU Tools</h1>
+        <p>西交学习与教务助手</p>
+      </div>
+      <span class="header-version" id="headerVersion">v—</span>
+    </header>
+
+    <section class="content" aria-live="polite">
+      <div class="status-heading">
+        <span class="status-indicator is-loading" id="statusIndicator" aria-hidden="true"></span>
+        <div>
+          <h2 id="statusTitle">正在检查更新</h2>
+          <p id="statusCopy">正在读取 GitHub 上的版本信息…</p>
+        </div>
+      </div>
+
+      <div class="version-row">
+        <div>
+          <span>当前版本</span>
+          <strong id="currentVersion">—</strong>
+        </div>
+        <span class="version-arrow" aria-hidden="true">→</span>
+        <div class="version-latest">
+          <span>最新版本</span>
+          <strong id="latestVersion">—</strong>
+        </div>
+      </div>
+
+      <button class="primary-button" id="updateButton" type="button" hidden>
+        前往 GitHub 下载更新
+        <span aria-hidden="true">↗</span>
+      </button>
+
+      <label class="reminder-option" id="reminderOption" hidden>
+        <input type="checkbox" id="dismissReminder">
+        <span class="checkmark" aria-hidden="true"></span>
+        <span class="reminder-copy">
+          <strong>本版本不再提醒</strong>
+          <small id="reminderHint">下一个新版本仍会提醒</small>
+        </span>
+      </label>
+
+      <button class="retry-button" id="retryButton" type="button" hidden>重新检查</button>
+    </section>
+
+    <footer class="app-footer">
+      <span>版本信息来自 GitHub master</span>
+      <button id="repositoryButton" type="button">项目主页</button>
+    </footer>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>
