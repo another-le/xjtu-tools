@@ -423,6 +423,35 @@
     transition: background 0.2s ease, border-color 0.2s ease;
 }
 
+.gh-category-filter-btn {
+    padding: 5px 9px;
+    border: 1px solid rgba(255, 255, 255, 0.42);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.gh-category-filter-btn:hover,
+.gh-category-filter-btn:focus-visible {
+    border-color: rgba(255, 255, 255, 0.72);
+    background: rgba(255, 255, 255, 0.24);
+    outline: none;
+}
+
+.gh-category-filter-btn.is-active {
+    border-color: #fff1b8;
+    background: #fff1b8;
+    color: #7b2020;
+    box-shadow: 0 0 0 2px rgba(255, 241, 184, 0.18);
+}
+
 .gh-transcript-link:hover,
 .gh-transcript-link:focus-visible {
     border-color: rgba(255, 255, 255, 0.7);
@@ -688,6 +717,27 @@
 
 .gh-row-unmapped td {
     color: #8a5a00;
+}
+
+.gh-row-excluded {
+    background: #f5f1ef;
+}
+
+.gh-row-excluded td {
+    color: #9a8e8a !important;
+}
+
+.gh-row-excluded td:first-child {
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+}
+
+.gh-row-excluded td:first-child::after {
+    content: "  · 不计入";
+    color: #a4493f;
+    font-size: 10px;
+    font-weight: 600;
+    text-decoration: none;
 }
 
 .gh-footer {
@@ -1125,6 +1175,15 @@ a:hover {
 
     .gh-group-title {
         flex-wrap: wrap;
+    }
+
+    .gh-header {
+        align-items: flex-start;
+    }
+
+    .gh-header-actions {
+        flex-wrap: wrap;
+        justify-content: flex-end;
     }
 
     .gh-semester-name {

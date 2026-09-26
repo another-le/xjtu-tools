@@ -61,6 +61,12 @@
     let draggedSemesterGroup = null;
     const selectedCourseDetails = new Map();
     let gradeDetailZIndex = 1000000;
+    let excludeGeneralEducationCourses = false;
+
+    const EXCLUDED_COURSE_CATEGORIES = new Set([
+        '基础通识类选修课',
+        '基础通识类核心课',
+    ]);
 
     const TRANSCRIPT_PRINT_URL = 'https://dzpz.xjtu.edu.cn/wui/index.html?#/main/cs/app/de7bbe52b2684ad08df41d3043f07d80_Guide?mode=guide&id=29&menuId=2&_key=6pjdy6';
     const GRADE_SETTINGS_STORAGE_KEY = 'gradeHelperSettings';
@@ -348,6 +354,7 @@
             code,
             name,
             credit: cleanDetailValue(dataset.xf || fieldValue('XF')),
+            courseCategory: cleanDetailValue(fieldValue('KCLBDM_DISPLAY')),
             totalScore,
             gradePoint: cleanDetailValue(dataset.xfjd || fieldValue('XFJD')),
             fields: fields.filter(field => !DETAIL_PROMOTED_KEYS.has(field.key)),
@@ -690,6 +697,7 @@
         <div class="gh-header">
             <span class="gh-header-title">成绩统计</span>
             <div class="gh-header-actions">
+                <button type="button" class="gh-category-filter-btn" aria-pressed="false" title="从统计中去除基础通识类选修课和基础通识类核心课">去除通识课</button>
                 <a class="gh-transcript-link" href="${TRANSCRIPT_PRINT_URL}" target="_blank" rel="noopener noreferrer" title="前往学校官网打印成绩单">打印成绩单 ↗</a>
                 <button type="button" class="gh-settings-btn" aria-label="打开成绩统计设置" aria-expanded="false" title="成绩统计设置">⚙</button>
             </div>
@@ -794,6 +802,52 @@
         makePanelDraggable(panel);
         renderRuleSummary();
         bindGradeSettings();
+        bindCourseCategoryFilter();
+    }
+
+    function isExcludedCourseCategory(category) {
+        return EXCLUDED_COURSE_CATEGORIES.has(cleanDetailValue(category).normalize('NFKC'));
+    }
+
+    function isCourseExcludedFromStats(row) {
+        return excludeGeneralEducationCourses && isExcludedCourseCategory(row?.dataset.courseCategory);
+    }
+
+    function syncCourseCategoryFilterState() {
+        const rows = Array.from(document.querySelectorAll('.gh-table tbody tr'));
+        let excludedCount = 0;
+        rows.forEach(row => {
+            const excluded = isCourseExcludedFromStats(row);
+            row.classList.toggle('gh-row-excluded', excluded);
+            if (excluded) excludedCount += 1;
+            if (excluded) {
+                row.title = `课程类别“${row.dataset.courseCategory}”已暂时从统计中去除`;
+            } else {
+                row.title = row.classList.contains('gh-row-unmapped')
+                    ? `等级“${row.dataset.grade}”尚未配置，不参与平均值计算`
+                    : '';
+            }
+        });
+
+        const button = document.querySelector('.gh-category-filter-btn');
+        if (!button) return;
+        button.classList.toggle('is-active', excludeGeneralEducationCourses);
+        button.setAttribute('aria-pressed', String(excludeGeneralEducationCourses));
+        button.textContent = excludeGeneralEducationCourses
+            ? `加回通识课${excludedCount ? `（${excludedCount}）` : ''}`
+            : '去除通识课';
+        button.title = excludeGeneralEducationCourses
+            ? `已去除 ${excludedCount} 门基础通识类选修课/核心课，点击加回统计`
+            : '从统计中去除基础通识类选修课和基础通识类核心课';
+    }
+
+    function bindCourseCategoryFilter() {
+        const button = document.querySelector('.gh-category-filter-btn');
+        if (!button) return;
+        button.addEventListener('click', () => {
+            excludeGeneralEducationCourses = !excludeGeneralEducationCourses;
+            calculateAverage();
+        });
     }
 
     function formatRuleNumber(value) {
@@ -1119,6 +1173,7 @@
         const tr = document.createElement('tr');
         tr.id = kch
         tr.dataset.courseKey = courseDetail?.key || `${year}::${kch}`;
+        tr.dataset.courseCategory = courseDetail?.courseCategory || '';
         if (courseDetail) {
             selectedCourseDetails.set(tr.dataset.courseKey, courseDetail);
         }
@@ -1161,6 +1216,7 @@
     function calculateStats(rows) {
         let totalCredits = 0, totalScore = 0, scoreWeight = 0, totalGpa = 0, gpaWeight = 0;
         rows.forEach(row => {
+            if (isCourseExcludedFromStats(row)) return;
             const credit = parseFloat(row.children[1].textContent) || 0;
             const scoreText = row.children[2].dataset.score;
             const gpaText = row.children[3].textContent;
@@ -1217,6 +1273,7 @@
     }
 
     function calculateAverage() {
+        syncCourseCategoryFilterState();
         const rows = document.querySelectorAll('.gh-table tbody tr');
         const stats = calculateStats(rows);
 
