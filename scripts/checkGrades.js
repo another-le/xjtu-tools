@@ -707,6 +707,17 @@
             <div class="gh-groups"></div>
         </div>
 
+        <section class="gh-gpa-distribution" id="gh-gpa-distribution" aria-label="绩点分布" hidden>
+            <div class="gh-distribution-heading">
+                <div>
+                    <strong>绩点分布</strong>
+                    <span class="gh-distribution-note">按课程门数统计</span>
+                </div>
+                <span class="gh-distribution-total">共 0 门</span>
+            </div>
+            <div class="gh-distribution-list"></div>
+        </section>
+
         <div class="gh-footer">
             <div class="gh-footer-left" aria-label="所选课程汇总">
                 <div class="gh-summary-item">
@@ -724,6 +735,10 @@
             </div>
 
             <div class="gh-footer-actions">
+                <button type="button" class="gh-distribution-toggle" aria-expanded="false" aria-controls="gh-gpa-distribution" title="查看各绩点下的课程数量">
+                    <span class="gh-distribution-icon" aria-hidden="true"><i></i><i></i><i></i></span>
+                    绩点分布
+                </button>
                 <span class="gh-help-icon">ⓘ<div class="gh-help-tooltip gh-rule-tooltip">
                     <div class="gh-tooltip-title">当前等级换算规则</div>
                     <div class="gh-rule-summary"></div>
@@ -803,6 +818,19 @@
         renderRuleSummary();
         bindGradeSettings();
         bindCourseCategoryFilter();
+        bindGpaDistribution();
+    }
+
+    function bindGpaDistribution() {
+        const button = document.querySelector('.gh-distribution-toggle');
+        const distribution = document.querySelector('.gh-gpa-distribution');
+        if (!button || !distribution) return;
+        button.addEventListener('click', () => {
+            const willOpen = distribution.hidden;
+            distribution.hidden = !willOpen;
+            button.classList.toggle('is-active', willOpen);
+            button.setAttribute('aria-expanded', String(willOpen));
+        });
     }
 
     function isExcludedCourseCategory(category) {
@@ -1240,6 +1268,57 @@
         };
     }
 
+    function renderGpaDistribution(rows) {
+        const list = document.querySelector('.gh-distribution-list');
+        const total = document.querySelector('.gh-distribution-total');
+        if (!list || !total) return;
+
+        const counts = new Map();
+        let courseCount = 0;
+        rows.forEach(row => {
+            if (isCourseExcludedFromStats(row)) return;
+            const gpa = Number(row.children[3].textContent);
+            if (!Number.isFinite(gpa)) return;
+            counts.set(gpa, (counts.get(gpa) || 0) + 1);
+            courseCount += 1;
+        });
+
+        total.textContent = `共 ${courseCount} 门`;
+        list.replaceChildren();
+        if (!counts.size) {
+            const empty = document.createElement('div');
+            empty.className = 'gh-distribution-empty';
+            empty.textContent = '添加课程后，这里会显示各绩点对应的课程数';
+            list.appendChild(empty);
+            return;
+        }
+
+        const maxCount = Math.max(...counts.values());
+        Array.from(counts.entries())
+            .sort(([gpaA], [gpaB]) => gpaB - gpaA)
+            .forEach(([gpa, count]) => {
+                const item = document.createElement('div');
+                item.className = 'gh-distribution-item';
+                item.title = `绩点 ${formatRuleNumber(gpa)}：${count} 门课程`;
+
+                const label = document.createElement('span');
+                label.className = 'gh-distribution-gpa';
+                label.textContent = formatRuleNumber(gpa);
+
+                const track = document.createElement('span');
+                track.className = 'gh-distribution-track';
+                const bar = document.createElement('i');
+                bar.style.width = `${Math.max(12, count / maxCount * 100)}%`;
+                track.appendChild(bar);
+
+                const value = document.createElement('strong');
+                value.textContent = `${count} 门`;
+
+                item.append(label, track, value);
+                list.appendChild(item);
+            });
+    }
+
     function updateRowState(row) {
         const scoreText = row.children[2].dataset.score;
         const score = scoreText === '' ? NaN : Number(scoreText);
@@ -1282,6 +1361,7 @@
         document.querySelector('.gpa-average').textContent = stats.averageGpa;
 
         document.querySelectorAll('.gh-group').forEach(updateSemesterStats);
+        renderGpaDistribution(rows);
     }
 
     function makePanelDraggable(panel) {

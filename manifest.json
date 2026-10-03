@@ -1,13 +1,19 @@
 {
     "name": "XJTU Tools",
-    "description": "为西交学生提供成绩分析、教务辅助和学习资源下载功能。",
-    "version": "1.2",
+    "description": "为西交学生提供网站快速访问、成绩分析、教务辅助和学习资源下载功能。",
+    "version": "1.3",
     "permissions": [
+        "activeTab",
         "alarms",
         "cookies",
         "downloads",
+        "favicon",
         "notifications",
+        "scripting",
         "storage"
+    ],
+    "optional_permissions": [
+        "bookmarks"
     ],
     "host_permissions": [
         "https://*.xjtu.edu.cn/*",
@@ -18,21 +24,47 @@
     "manifest_version": 3,
     "minimum_chrome_version": "127",
     "action": {
-        "default_icon": "icon.png",
-        "default_popup": "popup.html",
+        "default_icon": {
+            "16": "icons/icon-16.png",
+            "32": "icons/icon-32.png",
+            "48": "icons/icon-48.png",
+            "64": "icons/icon-64.png",
+            "128": "icons/icon-128.png"
+        },
+        "default_popup": "update-popup.html",
         "default_title": "XJTU Tools"
     },
     "background": {
         "service_worker": "scripts/background.js"
     },
+    "commands": {
+        "open-site-launcher-v2": {
+            "suggested_key": {
+                "default": "Alt+Q",
+                "mac": "Command+Shift+K"
+            },
+            "description": "打开 XJTU Tools 网站启动器"
+        }
+    },
     "icons": {
-        "16": "icon.png",
-        "32": "icon.png",
-        "48": "icon.png",
-        "64": "icon.png",
-        "128": "icon.png"
+        "16": "icons/icon-16.png",
+        "32": "icons/icon-32.png",
+        "48": "icons/icon-48.png",
+        "64": "icons/icon-64.png",
+        "128": "icons/icon-128.png"
     },
     "content_scripts": [
+        {
+            "matches": [
+                "https://*.xjtu.edu.cn/*",
+                "http://*.xjtu.edu.cn/*"
+            ],
+            "js": [
+                "scripts/siteData.js",
+                "scripts/siteDiscovery.js"
+            ],
+            "run_at": "document_idle"
+        },
         {
             "matches": [
                 "https://ehall.xjtu.edu.cn/jwapp/sys/cjcx/*default/*"
@@ -91,6 +123,14 @@
         }
     ],
     "web_accessible_resources": [
+        {
+            "resources": [
+                "_favicon/*"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
+        },
         {
             "resources": [
                 "scripts/inject.js"

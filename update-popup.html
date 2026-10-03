@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XJTU Tools</title>
+  <link rel="stylesheet" href="update-popup.css">
+</head>
+<body>
+  <main class="popup-shell">
+    <header class="app-header">
+      <img src="icon.png" alt="" class="app-icon">
+      <div class="app-heading">
+        <h1>XJTU Tools</h1>
+        <p>西交学习与教务助手</p>
+      </div>
+      <span class="header-version" id="headerVersion">v—</span>
+    </header>
+
+    <section class="navigator-control">
+      <div>
+        <strong>网站快速访问</strong>
+        <span id="navigatorStateText">快捷键与新网站发现已开启</span>
+      </div>
+      <label class="navigator-switch" title="开启或关闭网站快速访问">
+        <input id="navigatorEnabled" type="checkbox" checked>
+        <span aria-hidden="true"></span>
+      </label>
+    </section>
+
+    <section class="bookmark-sync" id="bookmarkSync" hidden>
+      <div class="discovery-heading">
+        <span class="discovery-favicon" id="bookmarkFaviconFallback">＋</span>
+        <div>
+          <strong>新书签已加入快速访问</strong>
+          <small id="bookmarkFolderPath"></small>
+        </div>
+      </div>
+      <p class="bookmark-title" id="bookmarkTitle"></p>
+      <label class="bookmark-keyword-field">
+        搜索词
+        <input id="bookmarkKeywords" type="text" maxlength="160" placeholder="多个关键词请用逗号分隔">
+      </label>
+      <span class="discovery-error" id="bookmarkError"></span>
+      <div class="discovery-question">
+        <button id="bookmarkDefaultButton" type="button">使用默认关键词</button>
+        <button class="discovery-primary" id="bookmarkAcceptButton" type="button">保存修改</button>
+      </div>
+    </section>
+
+    <section class="site-discovery" id="siteDiscovery" hidden>
+      <div class="discovery-heading">
+        <span class="discovery-favicon" id="discoveryFaviconFallback">＋</span>
+        <div>
+          <strong>发现新的西交网站</strong>
+          <small id="discoveryHostname"></small>
+        </div>
+      </div>
+      <p>要收藏到浏览器书签并添加到快速访问吗？</p>
+      <div class="discovery-question" id="discoveryQuestion">
+        <button id="discoveryLaterButton" type="button">稍后</button>
+        <button id="discoveryIgnoreButton" type="button">不再提示</button>
+        <button class="discovery-primary" id="discoveryAddButton" type="button">收藏并设置</button>
+      </div>
+      <div class="discovery-form" id="discoveryForm" hidden>
+        <div class="discovery-destination">
+          <span>收藏到</span>
+          <select id="discoveryBookmarkFolder" aria-label="选择收藏文件夹"></select>
+        </div>
+        <label>网站名称<input id="discoveryName" type="text" maxlength="40"></label>
+        <label>搜索词<input id="discoveryKeywords" type="text" maxlength="160" placeholder="多个关键词请用逗号分隔"></label>
+        <span class="discovery-error" id="discoveryError"></span>
+        <div class="discovery-question">
+          <button id="discoveryCancelButton" type="button">取消</button>
+          <button class="discovery-primary" id="discoverySaveButton" type="button">收藏并添加</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="content" aria-live="polite">
+      <div class="status-heading">
+        <span class="status-indicator is-loading" id="statusIndicator" aria-hidden="true"></span>
+        <div>
+          <h2 id="statusTitle">正在检查更新</h2>
+          <p id="statusCopy">正在读取 GitHub 上的版本信息…</p>
+        </div>
+      </div>
+
+      <div class="version-row">
+        <div>
+          <span>当前版本</span>
+          <strong id="currentVersion">—</strong>
+        </div>
+        <span class="version-arrow" aria-hidden="true">→</span>
+        <div class="version-latest">
+          <span>最新版本</span>
+          <strong id="latestVersion">—</strong>
+        </div>
+      </div>
+
+      <button class="primary-button" id="updateButton" type="button" hidden>
+        前往 GitHub 下载更新
+        <span aria-hidden="true">↗</span>
+      </button>
+
+      <label class="reminder-option" id="reminderOption" hidden>
+        <input type="checkbox" id="dismissReminder">
+        <span class="checkmark" aria-hidden="true"></span>
+        <span class="reminder-copy">
+          <strong>本版本不再提醒</strong>
+          <small id="reminderHint">下一个新版本仍会提醒</small>
+        </span>
+      </label>
+
+      <button class="retry-button" id="retryButton" type="button" hidden>重新检查</button>
+    </section>
+
+    <footer class="app-footer">
+      <span>版本信息来自 GitHub master</span>
+      <button id="repositoryButton" type="button">项目主页</button>
+    </footer>
+  </main>
+  <script src="scripts/siteData.js"></script>
+  <script src="update-popup.js"></script>
+</body>
+</html>

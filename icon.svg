@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <title>XJTU Tools</title>
+  <rect x="7" y="7" width="114" height="114" rx="25" fill="#C92B37"/>
+  <path d="M30 35L59 93" stroke="#FFF9F5" stroke-width="11" stroke-linecap="round"/>
+  <path d="M59 35L30 93" stroke="#FFF9F5" stroke-width="11" stroke-linecap="round"/>
+  <path d="M74 35H98V72C98 87 90 95 77 95C70 95 65 92 62 88" stroke="#FFF9F5" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

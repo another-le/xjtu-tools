@@ -1,0 +1,447 @@
+#xjtu-tools-site-launcher,
+#xjtu-tools-site-launcher * {
+  box-sizing: border-box;
+}
+
+#xjtu-tools-site-launcher {
+  --launcher-blue: #1684d8;
+  --launcher-ink: #28313b;
+  --launcher-muted: #8a95a1;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: grid;
+  place-items: start center;
+  padding: min(12vh, 108px) 20px 40px;
+  color: var(--launcher-ink);
+  font-family: Aptos, "Segoe UI Variable", "Microsoft YaHei UI", sans-serif;
+  line-height: 1.35;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: rgba(35, 49, 61, 0.12);
+  border: 0;
+  border-radius: 0;
+  backdrop-filter: blur(3px) saturate(0.92);
+  cursor: default;
+  opacity: 0;
+  transition: opacity 90ms linear;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-panel {
+  position: relative;
+  width: min(660px, calc(100vw - 40px));
+  overflow: visible;
+  background: rgba(247, 249, 252, 0.97);
+  border: 1px solid rgba(205, 214, 223, 0.96);
+  border-radius: 10px;
+  box-shadow: 0 20px 55px rgba(29, 43, 55, 0.24), 0 2px 8px rgba(29, 43, 55, 0.12);
+  opacity: 0;
+  transform: translateY(-7px);
+  transition: opacity 100ms ease, transform 130ms ease-out;
+}
+
+#xjtu-tools-site-launcher.is-visible .xjtu-launcher-backdrop,
+#xjtu-tools-site-launcher.is-visible .xjtu-launcher-panel {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+#xjtu-tools-site-launcher.is-closing .xjtu-launcher-backdrop,
+#xjtu-tools-site-launcher.is-closing .xjtu-launcher-panel {
+  opacity: 0;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-brand {
+  position: absolute;
+  z-index: 2;
+  top: -9px;
+  right: -9px;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  place-items: center;
+  color: #7d8995;
+  background: #f8fafc;
+  border: 1px solid #ced7df;
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(37, 51, 64, 0.13);
+  cursor: pointer;
+  font: 600 12px/1 Aptos, sans-serif;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-brand:hover {
+  color: var(--launcher-blue);
+  border-color: #a9cde8;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: center;
+  min-height: 70px;
+  margin: 0 20px;
+  border-bottom: 1px solid #d8e0e7;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-search input {
+  width: 100%;
+  height: 68px;
+  margin: 0;
+  padding: 0 2px;
+  color: #2d3640;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  box-shadow: none;
+  font: 400 25px/1.2 Aptos, "Segoe UI Variable", "Microsoft YaHei UI", sans-serif;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-search input::placeholder {
+  color: #a5afb9;
+  opacity: 1;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-search-glyph {
+  color: #b6c0ca;
+  font: 36px/1 Georgia, serif;
+  text-align: center;
+  transform: rotate(-17deg);
+  user-select: none;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-results {
+  max-height: min(432px, 58vh);
+  overflow: hidden auto;
+  padding: 9px 0;
+  border-radius: 0;
+  scrollbar-color: #aeb9c3 transparent;
+  scrollbar-width: thin;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-result {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 58px 54px;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-height: 52px;
+  margin: 0;
+  padding: 6px 19px;
+  color: var(--launcher-ink);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 70ms linear;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-result.is-active {
+  background: #dfe7f0;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-site-icon {
+  position: relative;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  color: #687580;
+  background: #f1f4f6;
+  border: 1px solid #d7dfe5;
+  border-radius: 4px;
+  box-shadow: 0 1px 1px rgba(34, 47, 58, 0.06);
+  font: 650 10px/1 Aptos, "Microsoft YaHei UI", sans-serif;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-site-icon::after {
+  display: none;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-site-icon img {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  background: #f1f4f6;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-site-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-site-copy strong {
+  overflow: hidden;
+  color: #2d3640;
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#xjtu-tools-site-launcher mark {
+  padding: 0;
+  color: var(--launcher-blue);
+  background: transparent;
+  font-weight: inherit;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-site-copy small {
+  display: block;
+  overflow: hidden;
+  color: var(--launcher-muted);
+  font-size: 10.5px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-shortcut {
+  color: #adb5be;
+  font: 400 11px/1 Aptos, "Segoe UI Variable", sans-serif;
+  text-align: right;
+  white-space: nowrap;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-result.is-active .xjtu-launcher-shortcut {
+  color: #929da8;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-result-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-edit,
+#xjtu-tools-site-launcher .xjtu-launcher-delete {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  place-items: center;
+  color: #98a3ad;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  box-shadow: none;
+  cursor: pointer;
+  font: 500 13px/1 Aptos, "Microsoft YaHei UI", sans-serif;
+  opacity: 0.55;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-result:hover .xjtu-launcher-edit,
+#xjtu-tools-site-launcher .xjtu-launcher-result.is-active .xjtu-launcher-edit,
+#xjtu-tools-site-launcher .xjtu-launcher-edit:focus-visible,
+#xjtu-tools-site-launcher .xjtu-launcher-result:hover .xjtu-launcher-delete,
+#xjtu-tools-site-launcher .xjtu-launcher-result.is-active .xjtu-launcher-delete,
+#xjtu-tools-site-launcher .xjtu-launcher-delete:focus-visible {
+  color: #536b7c;
+  background: rgba(255, 255, 255, 0.62);
+  opacity: 1;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-delete:hover,
+#xjtu-tools-site-launcher .xjtu-launcher-delete:focus-visible {
+  color: #b72b36;
+  background: rgba(255, 245, 246, 0.82);
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-empty {
+  display: flex;
+  min-height: 128px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 5px;
+  color: #919ca6;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-empty strong {
+  color: #53606c;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-empty span {
+  font-size: 10.5px;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+  padding: 7px 19px;
+  overflow: hidden;
+  color: #82909c;
+  background: #eef3f7;
+  border-top: 1px solid #d6dfe6;
+  border-radius: 0 0 10px 10px;
+  font-size: 9.5px;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-summary {
+  overflow: hidden;
+  color: #60717f;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-keys {
+  margin-left: 18px;
+  color: #9aa5ae;
+  white-space: nowrap;
+}
+
+#xjtu-tools-site-launcher kbd {
+  padding: 0;
+  color: #7e8a94;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  font: 500 9px/1 Aptos, Consolas, monospace;
+}
+
+#xjtu-tools-site-launcher .xjtu-launcher-settings {
+  display: none;
+}
+
+.xjtu-launcher-page {
+  width: 660px;
+  min-width: 0;
+  height: 540px;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+  background: #f7f9fb;
+}
+
+.xjtu-launcher-page #xjtu-tools-site-launcher {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  place-items: start center;
+  overflow: hidden;
+}
+
+.xjtu-launcher-page #xjtu-tools-site-launcher .xjtu-launcher-backdrop {
+  display: none;
+}
+
+.xjtu-launcher-page #xjtu-tools-site-launcher .xjtu-launcher-panel {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f8fafc;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.xjtu-launcher-page #xjtu-tools-site-launcher .xjtu-launcher-search {
+  grid-template-columns: minmax(0, 1fr) 44px 30px;
+  min-height: 70px;
+  margin: 0 20px;
+}
+
+.xjtu-launcher-page #xjtu-tools-site-launcher .xjtu-launcher-search input {
+  height: 68px;
+  font-size: 25px;
+}
+
+.xjtu-launcher-page #xjtu-tools-site-launcher .xjtu-launcher-search-glyph {
+  font-size: 36px;
+}
+
+.xjtu-launcher-page #xjtu-tools-site-launcher .xjtu-launcher-brand {
+  position: static;
+  width: 28px;
+  height: 28px;
+  color: #8995a0;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  box-shadow: none;
+  font-size: 14px;
+}
+
+.xjtu-launcher-page #xjtu-tools-site-launcher .xjtu-launcher-brand:hover {
+  background: #e8eef3;
+}
+
+.xjtu-launcher-page #xjtu-tools-site-launcher .xjtu-launcher-results {
+  min-height: 0;
+  max-height: none;
+  flex: 1;
+  padding: 9px 0;
+}
+
+.xjtu-launcher-page #xjtu-tools-site-launcher .xjtu-launcher-result {
+  min-height: 52px;
+  padding: 6px 19px;
+}
+
+.xjtu-launcher-page #xjtu-tools-site-launcher .xjtu-launcher-footer {
+  min-height: 38px;
+  flex: none;
+  padding-right: 19px;
+  padding-left: 19px;
+  border-radius: 0;
+}
+
+@media (max-width: 520px) {
+  #xjtu-tools-site-launcher {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
+  #xjtu-tools-site-launcher .xjtu-launcher-panel {
+    width: calc(100vw - 20px);
+  }
+
+  #xjtu-tools-site-launcher .xjtu-launcher-search {
+    margin: 0 14px;
+  }
+
+  #xjtu-tools-site-launcher .xjtu-launcher-search input {
+    font-size: 19px;
+  }
+
+  #xjtu-tools-site-launcher .xjtu-launcher-result {
+    grid-template-columns: 36px minmax(0, 1fr) 58px;
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  #xjtu-tools-site-launcher .xjtu-launcher-shortcut,
+  #xjtu-tools-site-launcher .xjtu-launcher-keys {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #xjtu-tools-site-launcher .xjtu-launcher-backdrop,
+  #xjtu-tools-site-launcher .xjtu-launcher-panel {
+    transition: none;
+  }
+}
