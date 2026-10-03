@@ -36,6 +36,14 @@ assert.equal(
   JSON.stringify(siteData.bookmarkGroupPath(['书签栏', '学习', '大一'])),
   '["书签","学习","大一"]'
 );
+assert.deepEqual(
+  Array.from(siteData.parseKeywords(['课程 查询', 'grade,query', '课程 查询'])),
+  ['课程 查询', 'grade,query']
+);
+assert.deepEqual(
+  Array.from(siteData.parseKeywords('成绩查询,grade\n选课')),
+  ['成绩查询,grade', '选课']
+);
 
 assert.deepEqual(
   Array.from(siteData.bookmarkTitleKeywords('我的课程 - 在线学习平台')),

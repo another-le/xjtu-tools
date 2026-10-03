@@ -39,7 +39,11 @@
       <p class="bookmark-title" id="bookmarkTitle"></p>
       <label class="bookmark-keyword-field">
         搜索词
-        <input id="bookmarkKeywords" type="text" maxlength="160" placeholder="多个关键词请用逗号分隔">
+        <span class="bookmark-keyword-editor" id="bookmarkKeywordEditor">
+          <span class="bookmark-keyword-tokens" id="bookmarkKeywordTokens"></span>
+          <input id="bookmarkKeywords" type="text" maxlength="40" placeholder="输入关键词后按 Enter" autocomplete="off">
+        </span>
+        <small>输入一个关键词后按 Enter 添加</small>
       </label>
       <span class="discovery-error" id="bookmarkError"></span>
       <div class="discovery-question">
@@ -56,25 +60,7 @@
           <small id="discoveryHostname"></small>
         </div>
       </div>
-      <p>要收藏到浏览器书签并添加到快速访问吗？</p>
-      <div class="discovery-question" id="discoveryQuestion">
-        <button id="discoveryLaterButton" type="button">稍后</button>
-        <button id="discoveryIgnoreButton" type="button">不再提示</button>
-        <button class="discovery-primary" id="discoveryAddButton" type="button">收藏并设置</button>
-      </div>
-      <div class="discovery-form" id="discoveryForm" hidden>
-        <div class="discovery-destination">
-          <span>收藏到</span>
-          <select id="discoveryBookmarkFolder" aria-label="选择收藏文件夹"></select>
-        </div>
-        <label>网站名称<input id="discoveryName" type="text" maxlength="40"></label>
-        <label>搜索词<input id="discoveryKeywords" type="text" maxlength="160" placeholder="多个关键词请用逗号分隔"></label>
-        <span class="discovery-error" id="discoveryError"></span>
-        <div class="discovery-question">
-          <button id="discoveryCancelButton" type="button">取消</button>
-          <button class="discovery-primary" id="discoverySaveButton" type="button">收藏并添加</button>
-        </div>
-      </div>
+      <p>如需加入快速访问，请点击地址栏的五角星，并收藏到已同步的书签文件夹。收藏后可继续确认搜索词。</p>
     </section>
 
     <section class="content" aria-live="polite">

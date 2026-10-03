@@ -237,8 +237,7 @@ function renderKeywordSuggestions() {
 }
 
 function commitKeywordDraft() {
-  const drafts = elements.siteKeywords.value.split(/[,，、;；]+/).map((item) => item.trim()).filter(Boolean);
-  drafts.forEach(addEditorKeyword);
+  addEditorKeyword(elements.siteKeywords.value);
   elements.siteKeywords.value = '';
   renderKeywordSuggestions();
 }
@@ -1643,9 +1642,7 @@ elements.keywordEditor.addEventListener('click', () => elements.siteKeywords.foc
 elements.siteKeywords.addEventListener('focus', renderKeywordSuggestions);
 elements.siteKeywords.addEventListener('input', () => {
   if (!elements.siteKeywords.matches(':focus')) return;
-  const value = elements.siteKeywords.value;
-  if (/[,，、;；]/.test(value)) commitKeywordDraft();
-  else renderKeywordSuggestions();
+  renderKeywordSuggestions();
 });
 elements.siteKeywords.addEventListener('keydown', (event) => {
   if (event.isComposing) return;

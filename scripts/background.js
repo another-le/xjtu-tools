@@ -285,6 +285,7 @@ async function queueCreatedBookmark(node) {
     });
   }
   await XJTUSiteData.saveSites(sites);
+  await clearSiteDiscoveryCandidatesForUrl(node.url);
   const pending = [
     ...(stored[BOOKMARK_PENDING_KEY] || []).filter((item) => String(item.id) !== String(node.id)),
     {
@@ -418,6 +419,31 @@ async function clearSiteDiscoveryCandidate(tabId) {
   } catch (_error) {
     // 标签页可能已经关闭。
   }
+}
+
+async function clearSiteDiscoveryCandidatesForUrl(rawUrl) {
+  let hostname = '';
+  try { hostname = new URL(rawUrl).hostname.toLocaleLowerCase('en-US'); }
+  catch (_error) { return; }
+
+  const stored = await chrome.storage.session.get(SITE_DISCOVERY_CANDIDATES_KEY);
+  const candidates = { ...(stored[SITE_DISCOVERY_CANDIDATES_KEY] || {}) };
+  const matchedTabIds = Object.entries(candidates)
+    .filter(([, candidate]) => candidate?.hostname === hostname)
+    .map(([tabId]) => Number(tabId))
+    .filter(Number.isInteger);
+  if (!matchedTabIds.length) return;
+
+  matchedTabIds.forEach((tabId) => delete candidates[tabId]);
+  await chrome.storage.session.set({ [SITE_DISCOVERY_CANDIDATES_KEY]: candidates });
+  await Promise.all(matchedTabIds.map(async (tabId) => {
+    try {
+      await chrome.action.setBadgeText({ tabId, text: '' });
+      await chrome.action.setTitle({ tabId, title: 'XJTU Tools' });
+    } catch (_error) {
+      // 标签页可能已经关闭。
+    }
+  }));
 }
 
 function isNewerVersion(candidate, current) {

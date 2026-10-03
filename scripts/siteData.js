@@ -18,11 +18,16 @@
   ]);
 
   function parseKeywords(value) {
-    const source = Array.isArray(value) ? value.join(' ') : String(value || '');
-    return [...new Set(source
-      .split(/[\s,，、;；]+/)
-      .map((keyword) => keyword.trim())
-      .filter(Boolean))];
+    const source = Array.isArray(value) ? value : String(value || '').split(/\r?\n/);
+    const seen = new Set();
+    return source
+      .map((keyword) => String(keyword || '').trim().replace(/\s+/g, ' '))
+      .filter((keyword) => {
+        const normalized = keyword.toLocaleLowerCase('zh-CN');
+        if (!keyword || seen.has(normalized)) return false;
+        seen.add(normalized);
+        return true;
+      });
   }
 
   function normalizeGroupPath(value) {

@@ -1,8 +1,6 @@
 const REPOSITORY_URL = 'https://github.com/another-le/xjtu-tools';
 const DISMISSED_UPDATE_VERSION_KEY = 'dismissedUpdateVersion';
 const BOOKMARK_PENDING_KEY = 'siteNavigatorPendingBookmarksV1';
-const BOOKMARK_SYNC_FOLDER_IDS_KEY = 'siteNavigatorBookmarkSyncFolderIdsV1';
-const BOOKMARK_GROUP_ROOT_KEY = 'siteNavigatorBookmarkGroupRootV1';
 
 const elements = {
   statusIndicator: document.querySelector('#statusIndicator'),
@@ -23,106 +21,56 @@ const elements = {
   bookmarkFaviconFallback: document.querySelector('#bookmarkFaviconFallback'),
   bookmarkFolderPath: document.querySelector('#bookmarkFolderPath'),
   bookmarkTitle: document.querySelector('#bookmarkTitle'),
+  bookmarkKeywordEditor: document.querySelector('#bookmarkKeywordEditor'),
+  bookmarkKeywordTokens: document.querySelector('#bookmarkKeywordTokens'),
   bookmarkKeywords: document.querySelector('#bookmarkKeywords'),
   bookmarkError: document.querySelector('#bookmarkError'),
   bookmarkDefaultButton: document.querySelector('#bookmarkDefaultButton'),
   bookmarkAcceptButton: document.querySelector('#bookmarkAcceptButton'),
   siteDiscovery: document.querySelector('#siteDiscovery'),
   discoveryHostname: document.querySelector('#discoveryHostname'),
-  discoveryFaviconFallback: document.querySelector('#discoveryFaviconFallback'),
-  discoveryQuestion: document.querySelector('#discoveryQuestion'),
-  discoveryForm: document.querySelector('#discoveryForm'),
-  discoveryBookmarkFolder: document.querySelector('#discoveryBookmarkFolder'),
-  discoveryName: document.querySelector('#discoveryName'),
-  discoveryKeywords: document.querySelector('#discoveryKeywords'),
-  discoveryError: document.querySelector('#discoveryError'),
-  discoveryLaterButton: document.querySelector('#discoveryLaterButton'),
-  discoveryIgnoreButton: document.querySelector('#discoveryIgnoreButton'),
-  discoveryAddButton: document.querySelector('#discoveryAddButton'),
-  discoveryCancelButton: document.querySelector('#discoveryCancelButton'),
-  discoverySaveButton: document.querySelector('#discoverySaveButton')
+  discoveryFaviconFallback: document.querySelector('#discoveryFaviconFallback')
 };
 
 let currentUpdateInfo = null;
 let discoveryCandidate = null;
-let discoveryTabId = null;
 let pendingBookmark = null;
-let discoveryBookmarkFolders = [];
+let pendingKeywords = [];
 
-function parsePopupKeywords(value) {
-  const seen = new Set();
-  return String(value || '')
-    .split(/[,，、;；\n]+/)
-    .map((keyword) => keyword.trim().replace(/\s+/g, ' '))
-    .filter((keyword) => {
-      const normalized = keyword.toLocaleLowerCase('zh-CN');
-      if (!keyword || seen.has(normalized)) return false;
-      seen.add(normalized);
-      return true;
+function addPendingKeyword(rawKeyword) {
+  const keyword = String(rawKeyword || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+  if (!keyword) return false;
+  const normalized = keyword.toLocaleLowerCase('zh-CN');
+  if (pendingKeywords.some((item) => item.toLocaleLowerCase('zh-CN') === normalized)) return false;
+  pendingKeywords.push(keyword);
+  return true;
+}
+
+function renderPendingKeywords() {
+  elements.bookmarkKeywordTokens.replaceChildren();
+  pendingKeywords.forEach((keyword, index) => {
+    const token = document.createElement('span');
+    token.className = 'bookmark-keyword-token';
+    const text = document.createElement('span');
+    text.textContent = keyword;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', `删除关键词 ${keyword}`);
+    remove.addEventListener('click', () => {
+      pendingKeywords.splice(index, 1);
+      renderPendingKeywords();
+      elements.bookmarkKeywords.focus();
     });
-}
-
-async function bookmarkSourceFromNode(node) {
-  const folders = [];
-  const folderIds = [];
-  let parentId = node.parentId;
-  while (parentId) {
-    const [parent] = await chrome.bookmarks.get(String(parentId));
-    if (!parent) break;
-    if (parent.title) {
-      folders.unshift(parent.title);
-      folderIds.unshift(String(parent.id));
-    }
-    parentId = parent.parentId;
-  }
-  const stored = await chrome.storage.local.get(BOOKMARK_GROUP_ROOT_KEY);
-  const groupPath = XJTUSiteData.bookmarkGroupPath(folders);
-  groupPath[0] = stored[BOOKMARK_GROUP_ROOT_KEY] || '书签';
-  return {
-    id: String(node.id),
-    parentId: String(node.parentId || ''),
-    folders,
-    folderIds,
-    groupPath
-  };
-}
-
-function syncedBookmarkFolders(tree, syncedFolderIds) {
-  const output = [];
-  const visit = (nodes, parentTitles = []) => nodes.forEach((node) => {
-    if (node.url) return;
-    const titles = node.title ? [...parentTitles, node.title] : parentTitles;
-    if (node.title && syncedFolderIds.has(String(node.id))) {
-      output.push({
-        id: String(node.id),
-        label: titles.join(' / ')
-      });
-    }
-    visit(node.children || [], titles);
+    token.append(text, remove);
+    elements.bookmarkKeywordTokens.append(token);
   });
-  visit(tree);
-  return output.sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'));
 }
 
-async function ensureDiscoveryBookmark() {
-  const folderId = String(elements.discoveryBookmarkFolder.value || '');
-  if (!discoveryBookmarkFolders.some((folder) => folder.id === folderId)) {
-    throw new Error('请选择一个已导入的书签文件夹');
-  }
-  const matches = await chrome.bookmarks.search({ url: discoveryCandidate.url });
-  const existing = matches.find((node) =>
-    node.url === discoveryCandidate.url && String(node.parentId) === folderId);
-  if (existing) {
-    const name = elements.discoveryName.value.trim();
-    return name && name !== existing.title
-      ? chrome.bookmarks.update(existing.id, { title: name })
-      : existing;
-  }
-  return chrome.bookmarks.create({
-    parentId: folderId,
-    title: elements.discoveryName.value.trim(),
-    url: discoveryCandidate.url
-  });
+function commitPendingKeyword() {
+  const added = addPendingKeyword(elements.bookmarkKeywords.value);
+  elements.bookmarkKeywords.value = '';
+  if (added) renderPendingKeywords();
 }
 
 async function resolvePendingBookmark() {
@@ -143,9 +91,8 @@ async function acceptPendingBookmark(useDefaultKeywords = false) {
   const defaultKeywords = pendingBookmark.defaultKeywords?.length
     ? pendingBookmark.defaultKeywords
     : (fallbackKeywords.length ? fallbackKeywords : [pendingBookmark.title].filter(Boolean));
-  const keywords = useDefaultKeywords
-    ? defaultKeywords
-    : parsePopupKeywords(elements.bookmarkKeywords.value);
+  if (!useDefaultKeywords) commitPendingKeyword();
+  const keywords = useDefaultKeywords ? defaultKeywords : [...pendingKeywords];
   if (!keywords.length) {
     elements.bookmarkError.textContent = '请至少填写一个搜索词';
     elements.bookmarkKeywords.focus();
@@ -211,7 +158,10 @@ async function loadPendingBookmark() {
   const defaultKeywords = pendingBookmark.defaultKeywords?.length
     ? pendingBookmark.defaultKeywords
     : (fallbackKeywords.length ? fallbackKeywords : [pendingBookmark.title].filter(Boolean));
-  elements.bookmarkKeywords.value = defaultKeywords.join('，');
+  pendingKeywords = [];
+  defaultKeywords.forEach(addPendingKeyword);
+  elements.bookmarkKeywords.value = '';
+  renderPendingKeywords();
   const favicon = document.createElement('img');
   favicon.src = XJTUSiteData.faviconUrl(pendingBookmark.url, 32);
   favicon.alt = '';
@@ -234,183 +184,11 @@ async function loadNavigatorState() {
   return enabled;
 }
 
-async function clearDiscoveryCandidate() {
-  if (!Number.isInteger(discoveryTabId)) return;
-  await chrome.runtime.sendMessage({
-    action: 'clearSiteDiscoveryCandidate',
-    tabId: discoveryTabId
-  });
-}
-
-async function dismissDiscoveryForSession() {
-  if (!discoveryCandidate) return;
-  await chrome.runtime.sendMessage({
-    action: 'dismissSiteDiscoverySession',
-    hostname: discoveryCandidate.hostname
-  });
-  await clearDiscoveryCandidate();
-  window.close();
-}
-
-async function ignoreDiscoveryHost() {
-  if (!discoveryCandidate) return;
-  const stored = await chrome.storage.local.get(XJTUSiteData.DISCOVERY_IGNORED_HOSTS_KEY);
-  const ignored = [...new Set([
-    ...(stored[XJTUSiteData.DISCOVERY_IGNORED_HOSTS_KEY] || []),
-    discoveryCandidate.hostname
-  ])];
-  await chrome.storage.local.set({ [XJTUSiteData.DISCOVERY_IGNORED_HOSTS_KEY]: ignored });
-  await clearDiscoveryCandidate();
-  window.close();
-}
-
-async function openDiscoveryForm() {
-  elements.discoveryQuestion.hidden = true;
-  elements.discoveryForm.hidden = false;
-  elements.discoverySaveButton.disabled = true;
-  elements.discoveryBookmarkFolder.replaceChildren(new Option('正在读取已导入的文件夹…', ''));
-  elements.discoveryBookmarkFolder.disabled = true;
-  let hasPermission = await chrome.permissions.contains({ permissions: ['bookmarks'] });
-  if (!hasPermission) {
-    hasPermission = await chrome.permissions.request({ permissions: ['bookmarks'] });
-  }
-  if (!hasPermission) {
-    elements.discoveryBookmarkFolder.replaceChildren(new Option('未获得书签权限', ''));
-    elements.discoveryError.textContent = '需要书签权限才能继续';
-    return;
-  }
-  try {
-    const [tree, syncState, matches] = await Promise.all([
-      chrome.bookmarks.getTree(),
-      chrome.storage.local.get(BOOKMARK_SYNC_FOLDER_IDS_KEY),
-      chrome.bookmarks.search({ url: discoveryCandidate.url })
-    ]);
-    const syncedFolderIds = new Set((syncState[BOOKMARK_SYNC_FOLDER_IDS_KEY] || []).map(String));
-    discoveryBookmarkFolders = syncedBookmarkFolders(tree, syncedFolderIds);
-    elements.discoveryBookmarkFolder.replaceChildren();
-    discoveryBookmarkFolders.forEach((folder) => {
-      elements.discoveryBookmarkFolder.append(new Option(folder.label, folder.id));
-    });
-    if (!discoveryBookmarkFolders.length) {
-      elements.discoveryBookmarkFolder.append(new Option('尚未导入书签文件夹', ''));
-      elements.discoveryError.textContent = '请先在设置页导入一个书签文件夹作为搜索源';
-      return;
-    }
-    const existing = matches.find((node) =>
-      node.url === discoveryCandidate.url && syncedFolderIds.has(String(node.parentId)));
-    if (existing) elements.discoveryBookmarkFolder.value = String(existing.parentId);
-    elements.discoveryBookmarkFolder.disabled = false;
-    elements.discoverySaveButton.disabled = false;
-  } catch (error) {
-    elements.discoveryBookmarkFolder.replaceChildren(new Option('无法读取书签文件夹', ''));
-    elements.discoveryError.textContent = error.message;
-    return;
-  }
-  elements.discoveryName.focus();
-}
-
-function closeDiscoveryForm() {
-  elements.discoveryQuestion.hidden = false;
-  elements.discoveryForm.hidden = true;
-  elements.discoverySaveButton.disabled = false;
-  elements.discoveryBookmarkFolder.disabled = false;
-  discoveryBookmarkFolders = [];
-  elements.discoveryError.textContent = '';
-}
-
-async function saveDiscoveredSite() {
-  if (!discoveryCandidate) return;
-  const name = elements.discoveryName.value.trim();
-  const keywords = parsePopupKeywords(elements.discoveryKeywords.value);
-  if (!name) {
-    elements.discoveryError.textContent = '请填写网站名称';
-    elements.discoveryName.focus();
-    return;
-  }
-  if (!keywords.length) {
-    elements.discoveryError.textContent = '请至少填写一个搜索词';
-    elements.discoveryKeywords.focus();
-    return;
-  }
-
-  let hasBookmarkPermission = await chrome.permissions.contains({ permissions: ['bookmarks'] });
-  if (!hasBookmarkPermission) {
-    hasBookmarkPermission = await chrome.permissions.request({ permissions: ['bookmarks'] });
-  }
-  if (!hasBookmarkPermission) {
-    elements.discoveryError.textContent = '需要书签权限才能收藏并添加网站';
-    return;
-  }
-
-  let bookmark;
-  let source;
-  try {
-    bookmark = await ensureDiscoveryBookmark();
-    source = await bookmarkSourceFromNode(bookmark);
-    source.syncMode = 'folder';
-  } catch (error) {
-    elements.discoveryError.textContent = `收藏失败：${error.message}`;
-    return;
-  }
-
-  const sites = await XJTUSiteData.getSites();
-  const urlKey = XJTUSiteData.canonicalUrlKey(discoveryCandidate.url);
-  const existing = sites.find((site) => XJTUSiteData.canonicalUrlKey(site.url) === urlKey);
-  if (existing) {
-    existing.keywords = [...new Set([...(existing.keywords || []), ...keywords])];
-    existing.importedFromBookmarks = true;
-    existing.sourceBookmarkIds = [...new Set([
-      ...(existing.sourceBookmarkIds || []).map(String),
-      String(bookmark.id)
-    ])];
-    existing.bookmarkSources = [
-      ...(existing.bookmarkSources || []).filter((item) => String(item.id) !== String(bookmark.id)),
-      source
-    ];
-    if (!(existing.groupPaths || []).some((path) => JSON.stringify(path) === JSON.stringify(source.groupPath))) {
-      existing.groupPaths = [...(existing.groupPaths || []), source.groupPath];
-    }
-    existing.updatedAt = Date.now();
-  } else {
-    const now = Date.now();
-    sites.push({
-      id: `discovered-${now}-${Math.random().toString(36).slice(2, 7)}`,
-      name,
-      url: discoveryCandidate.url,
-      description: `西交网站 · ${discoveryCandidate.hostname}`,
-      keywords,
-      builtin: false,
-      importedFromBookmarks: true,
-      bookmarkOnly: true,
-      sourceBookmarkIds: [String(bookmark.id)],
-      bookmarkSources: [source],
-      groupPaths: [source.groupPath],
-      usageCount: 0,
-      lastUsedAt: 0,
-      createdAt: now,
-      updatedAt: now
-    });
-  }
-  const syncState = await chrome.storage.local.get([BOOKMARK_SYNC_FOLDER_IDS_KEY, BOOKMARK_PENDING_KEY]);
-  const syncedFolderIds = new Set((syncState[BOOKMARK_SYNC_FOLDER_IDS_KEY] || []).map(String));
-  const pending = (syncState[BOOKMARK_PENDING_KEY] || [])
-    .filter((item) => String(item.id) !== String(bookmark.id));
-  await chrome.storage.local.set({
-    [XJTUSiteData.STORAGE_KEY]: sites,
-    [BOOKMARK_SYNC_FOLDER_IDS_KEY]: [...syncedFolderIds],
-    [BOOKMARK_PENDING_KEY]: pending
-  });
-  await chrome.action.setBadgeText({ text: pending.length ? '+' : '' });
-  await clearDiscoveryCandidate();
-  window.close();
-}
-
 async function loadDiscoveryCandidate() {
   const enabled = await loadNavigatorState();
   if (!enabled) return;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!Number.isInteger(tab?.id)) return;
-  discoveryTabId = tab.id;
   const response = await chrome.runtime.sendMessage({
     action: 'getSiteDiscoveryCandidate',
     tabId: tab.id
@@ -419,10 +197,6 @@ async function loadDiscoveryCandidate() {
 
   discoveryCandidate = response.candidate;
   elements.discoveryHostname.textContent = discoveryCandidate.hostname;
-  elements.discoveryName.value = discoveryCandidate.name;
-  elements.discoveryKeywords.value = XJTUSiteData
-    .bookmarkTitleKeywords(discoveryCandidate.name)
-    .join('，');
   const favicon = document.createElement('img');
   favicon.src = XJTUSiteData.faviconUrl(discoveryCandidate.url, 32);
   favicon.alt = '';
@@ -543,23 +317,17 @@ elements.navigatorEnabled.addEventListener('change', async () => {
     : '快捷键与新网站发现已关闭';
   if (!enabled) elements.siteDiscovery.hidden = true;
 });
-elements.discoveryLaterButton.addEventListener('click', dismissDiscoveryForSession);
-elements.discoveryIgnoreButton.addEventListener('click', ignoreDiscoveryHost);
-elements.discoveryAddButton.addEventListener('click', openDiscoveryForm);
-elements.discoveryCancelButton.addEventListener('click', closeDiscoveryForm);
-elements.discoverySaveButton.addEventListener('click', saveDiscoveredSite);
-elements.discoveryForm.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter') {
-    event.preventDefault();
-    saveDiscoveredSite();
-  }
-});
 elements.bookmarkDefaultButton.addEventListener('click', () => acceptPendingBookmark(true));
 elements.bookmarkAcceptButton.addEventListener('click', () => acceptPendingBookmark(false));
+elements.bookmarkKeywordEditor.addEventListener('click', () => elements.bookmarkKeywords.focus());
 elements.bookmarkKeywords.addEventListener('keydown', (event) => {
+  if (event.isComposing) return;
   if (event.key === 'Enter') {
     event.preventDefault();
-    acceptPendingBookmark(false);
+    commitPendingKeyword();
+  } else if (event.key === 'Backspace' && !elements.bookmarkKeywords.value && pendingKeywords.length) {
+    pendingKeywords.pop();
+    renderPendingKeywords();
   }
 });
 
