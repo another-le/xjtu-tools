@@ -1378,7 +1378,7 @@ function updateBookmarkSelectionState() {
   if (!selectedVisibleFolders && selectedVisible) elements.selectAllBookmarks.indeterminate = true;
   elements.bookmarkSelectionCount.textContent =
     `已选 ${selectedBookmarkFolderIds.size} 个文件夹 · ${selectedBookmarkIds.size} 个书签`;
-  elements.confirmBookmarkButton.disabled = selectedBookmarkIds.size === 0;
+  elements.confirmBookmarkButton.disabled = selectedBookmarkIds.size === 0 && selectedBookmarkFolderIds.size === 0;
 }
 
 function renderBookmarkNodes(nodes, container, depth = 0, forceExpanded = false) {
@@ -1399,7 +1399,7 @@ function renderBookmarkNodes(nodes, container, depth = 0, forceExpanded = false)
 
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
-      checkbox.checked = descendantBookmarks.length > 0 && selectedCount === descendantBookmarks.length;
+      checkbox.checked = selectedBookmarkFolderIds.has(String(node.id));
       checkbox.indeterminate = selectedCount > 0 && selectedCount < descendantBookmarks.length;
       checkbox.addEventListener('change', () => {
         const descendantFolders = bookmarkFoldersInNodes([node], []);
@@ -1494,7 +1494,8 @@ function renderBookmarks() {
 
 async function openBookmarkImporter() {
   try {
-    const granted = await chrome.permissions.request({ permissions: ['bookmarks'] });
+    const granted = await chrome.permissions.contains({ permissions: ['bookmarks'] }) ||
+      await chrome.permissions.request({ permissions: ['bookmarks'] });
     if (!granted) {
       showToast('未获得书签读取权限');
       return;

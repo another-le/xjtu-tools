@@ -131,7 +131,7 @@ function collectRemovedBookmarkTree(node, bookmarkIds = new Set(), folderIds = n
   return { bookmarkIds, folderIds };
 }
 
-async function removeBookmarkSources(removedNode) {
+async function removeBookmarkSources(removedNode, { preservePending = false } = {}) {
   const removed = collectRemovedBookmarkTree(removedNode);
   const stored = await chrome.storage.local.get([
     SITE_ENTRIES_KEY,
@@ -176,8 +176,10 @@ async function removeBookmarkSources(removedNode) {
   const syncedIds = (stored[BOOKMARK_SYNC_FOLDER_IDS_KEY] || [])
     .map(String)
     .filter((id) => !removed.folderIds.has(id));
-  const pending = (stored[BOOKMARK_PENDING_KEY] || [])
-    .filter((item) => !removed.bookmarkIds.has(String(item.id)));
+  const pending = preservePending
+    ? (stored[BOOKMARK_PENDING_KEY] || [])
+    : (stored[BOOKMARK_PENDING_KEY] || [])
+      .filter((item) => !removed.bookmarkIds.has(String(item.id)));
   await chrome.storage.local.set({
     [SITE_ENTRIES_KEY]: nextSites,
     [BOOKMARK_SYNC_FOLDER_IDS_KEY]: syncedIds,
@@ -186,36 +188,69 @@ async function removeBookmarkSources(removedNode) {
   if (!pending.length) await chrome.action.setBadgeText({ text: '' });
 }
 
-function waitForBookmarkBubble(delayMs) {
-  return new Promise((resolve) => setTimeout(resolve, delayMs));
-}
-
 async function openPendingBookmarkPrompt(bookmarkId) {
-  // 收藏气泡关闭后的前两秒高频尝试，随后逐步退避。
-  const retryDelays = [0, 100, 150, 200, 300, 450, 650, 900, 1300, 2000, 3000];
-  let windowId = null;
-  try {
-    const activeWindow = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
-    windowId = activeWindow?.id;
-  } catch (_error) {
-    return false;
-  }
-  if (!windowId) return false;
+  const [pendingState, bookmarks] = await Promise.all([
+    chrome.storage.local.get([BOOKMARK_PENDING_KEY, BOOKMARK_SYNC_FOLDER_IDS_KEY, SITE_ENTRIES_KEY]),
+    chrome.bookmarks.get(String(bookmarkId)).catch(() => [])
+  ]);
+  const pending = pendingState[BOOKMARK_PENDING_KEY] || [];
+  const item = pending.find((bookmark) => String(bookmark.id) === String(bookmarkId));
+  const node = bookmarks[0];
+  if (!item || !node?.url) return false;
+  const source = await bookmarkSourceFromNode(node);
+  const syncedFolderIds = new Set((pendingState[BOOKMARK_SYNC_FOLDER_IDS_KEY] || []).map(String));
+  const indexed = (pendingState[SITE_ENTRIES_KEY] || []).some((site) =>
+    (site.sourceBookmarkIds || []).map(String).includes(String(bookmarkId)));
+  item.title = node.title || new URL(node.url).hostname;
+  item.url = node.url;
+  item.source = {
+    ...source,
+    syncMode: source.folderIds.some((id) => syncedFolderIds.has(id)) ? 'folder' : 'bookmark'
+  };
+  item.defaultKeywords = XJTUSiteData.bookmarkTitleKeywords(item.title);
+  item.indexedWithDefaults = indexed;
+  if (!indexed) item.addedDefaultKeywords = [];
+  await chrome.storage.local.set({ [BOOKMARK_PENDING_KEY]: pending });
 
+  const retryDelays = [0, 200, 300, 450, 650, 900, 1300, 1800, 2500];
+  const popupUrl = chrome.runtime.getURL('update-popup.html');
+  let lastError = null;
   for (const delayMs of retryDelays) {
-    await waitForBookmarkBubble(delayMs);
-    const pendingState = await chrome.storage.local.get(BOOKMARK_PENDING_KEY);
-    const stillPending = (pendingState[BOOKMARK_PENDING_KEY] || [])
-      .some((item) => String(item.id) === String(bookmarkId));
-    if (!stillPending) return true;
+    if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    const current = await chrome.storage.local.get(BOOKMARK_PENDING_KEY);
+    const currentItem = (current[BOOKMARK_PENDING_KEY] || [])
+      .find((entry) => String(entry.id) === String(bookmarkId));
+    if (!currentItem || currentItem.deferred) {
+      return true;
+    }
+
+    let windowId;
+    try {
+      windowId = (await chrome.windows.getLastFocused({ windowTypes: ['normal'] }))?.id;
+    } catch (error) {
+      lastError = error;
+      continue;
+    }
+    if (!Number.isInteger(windowId)) continue;
 
     try {
       await chrome.action.openPopup({ windowId });
-      return true;
-    } catch (_error) {
-      // Chrome 的收藏气泡尚未关闭时会拒绝打开扩展 Popup，稍后重试。
+    } catch (error) {
+      lastError = error;
+    }
+    // 收藏气泡可能使刚打开的面板立刻关闭；确认面板仍在再结束重试。
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    try {
+      const contexts = await chrome.runtime.getContexts({
+        contextTypes: ['POPUP'],
+        documentUrls: [popupUrl]
+      });
+      if (contexts.length) return true;
+    } catch (error) {
+      lastError = error;
     }
   }
+  console.warn('[Bookmark Sync] 无法自动打开工具栏面板，已保留 + 徽标:', lastError);
   return false;
 }
 
@@ -226,17 +261,14 @@ async function queueCreatedBookmark(node) {
     SITE_ENTRIES_KEY
   ]);
   const syncedFolderIds = new Set((stored[BOOKMARK_SYNC_FOLDER_IDS_KEY] || []).map(String));
-  if (!syncedFolderIds.has(String(node.parentId))) return;
-  if (!node.url) {
-    syncedFolderIds.add(String(node.id));
-    await chrome.storage.local.set({ [BOOKMARK_SYNC_FOLDER_IDS_KEY]: [...syncedFolderIds] });
-    return;
-  }
+  if (!node.url) return;
+  const bookmarkSource = await bookmarkSourceFromNode(node);
+  const folderSynced = bookmarkSource.folderIds.some((id) => syncedFolderIds.has(id));
   const sites = Array.isArray(stored[SITE_ENTRIES_KEY]) ? stored[SITE_ENTRIES_KEY] : [];
   if (sites.some((site) => (site.sourceBookmarkIds || []).map(String).includes(String(node.id)))) return;
   const source = {
-    ...await bookmarkSourceFromNode(node),
-    syncMode: 'folder'
+    ...bookmarkSource,
+    syncMode: folderSynced ? 'folder' : 'bookmark'
   };
   const generatedKeywords = XJTUSiteData.bookmarkTitleKeywords(node.title);
   const defaultKeywords = generatedKeywords.length
@@ -249,7 +281,7 @@ async function queueCreatedBookmark(node) {
   const addedDefaultKeywords = defaultKeywords.filter((keyword) =>
     !previousKeywordKeys.has(keyword.toLocaleLowerCase('zh-CN')));
   const now = Date.now();
-  if (existing) {
+  if (folderSynced && existing) {
     existing.keywords = [...new Set([...previousKeywords, ...defaultKeywords])];
     existing.importedFromBookmarks = true;
     existing.bookmarkOnly = true;
@@ -265,7 +297,7 @@ async function queueCreatedBookmark(node) {
       existing.groupPaths = [...(existing.groupPaths || []), source.groupPath];
     }
     existing.updatedAt = now;
-  } else {
+  } else if (folderSynced) {
     sites.push({
       id: `bookmark-${now}-${Math.random().toString(36).slice(2, 7)}`,
       name: node.title || new URL(node.url).hostname,
@@ -284,8 +316,10 @@ async function queueCreatedBookmark(node) {
       updatedAt: now
     });
   }
-  await XJTUSiteData.saveSites(sites);
-  await clearSiteDiscoveryCandidatesForUrl(node.url);
+  if (folderSynced) {
+    await XJTUSiteData.saveSites(sites);
+    await clearSiteDiscoveryCandidatesForUrl(node.url);
+  }
   const pending = [
     ...(stored[BOOKMARK_PENDING_KEY] || []).filter((item) => String(item.id) !== String(node.id)),
     {
@@ -294,22 +328,22 @@ async function queueCreatedBookmark(node) {
       url: node.url,
       source,
       defaultKeywords,
-      addedDefaultKeywords,
-      indexedWithDefaults: true,
+      addedDefaultKeywords: folderSynced ? addedDefaultKeywords : [],
+      indexedWithDefaults: folderSynced,
       createdAt: now
     }
   ];
   await chrome.storage.local.set({ [BOOKMARK_PENDING_KEY]: pending });
   await chrome.action.setBadgeBackgroundColor({ color: '#c92b37' });
   await chrome.action.setBadgeText({ text: '+' });
-  await chrome.action.setTitle({ title: '新书签已加入快速访问，可确认或修改关键词' });
+  await chrome.action.setTitle({ title: '新书签等待设置搜索词' });
   await openPendingBookmarkPrompt(node.id);
 }
 
 async function syncMovedBookmarkNode(bookmarkId, parentId) {
   const [[node], stored] = await Promise.all([
     chrome.bookmarks.get(String(bookmarkId)),
-    chrome.storage.local.get([SITE_ENTRIES_KEY, BOOKMARK_SYNC_FOLDER_IDS_KEY])
+    chrome.storage.local.get([SITE_ENTRIES_KEY, BOOKMARK_SYNC_FOLDER_IDS_KEY, BOOKMARK_PENDING_KEY])
   ]);
   if (!node) return;
 
@@ -329,9 +363,23 @@ async function syncMovedBookmarkNode(bookmarkId, parentId) {
   const isIndividuallyLinked = sites.some((site) =>
     (site.bookmarkSources || []).some((source) =>
       String(source.id) === String(bookmarkId) && source.syncMode === 'bookmark'));
-  if (syncedFolderIds.has(String(parentId))) {
+  const source = await bookmarkSourceFromNode({ ...node, parentId });
+  const folderSynced = source.folderIds.some((id) => syncedFolderIds.has(id));
+  const pending = stored[BOOKMARK_PENDING_KEY] || [];
+  const pendingBookmark = pending.find((item) => String(item.id) === String(bookmarkId));
+  if (pendingBookmark) {
+    pendingBookmark.title = node.title;
+    pendingBookmark.url = node.url;
+    pendingBookmark.source = { ...source, syncMode: folderSynced ? 'folder' : 'bookmark' };
+    if (!folderSynced && !isIndividuallyLinked) {
+      pendingBookmark.indexedWithDefaults = false;
+      pendingBookmark.addedDefaultKeywords = [];
+    }
+    await chrome.storage.local.set({ [BOOKMARK_PENDING_KEY]: pending });
+  }
+  if (folderSynced) {
     if (isLinkedBookmark) await syncChangedBookmarkNode(bookmarkId);
-    else await queueCreatedBookmark(node);
+    else if (!pendingBookmark) await queueCreatedBookmark(node);
     return;
   }
 
@@ -340,7 +388,7 @@ async function syncMovedBookmarkNode(bookmarkId, parentId) {
     return;
   }
 
-  await removeBookmarkSources(node);
+  if (isLinkedBookmark) await removeBookmarkSources(node, { preservePending: Boolean(pendingBookmark) });
 }
 
 async function deleteNavigatorSite(siteId) {

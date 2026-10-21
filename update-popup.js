@@ -18,6 +18,7 @@ const elements = {
   navigatorEnabled: document.querySelector('#navigatorEnabled'),
   navigatorStateText: document.querySelector('#navigatorStateText'),
   bookmarkSync: document.querySelector('#bookmarkSync'),
+  bookmarkSyncTitle: document.querySelector('#bookmarkSyncTitle'),
   bookmarkFaviconFallback: document.querySelector('#bookmarkFaviconFallback'),
   bookmarkFolderPath: document.querySelector('#bookmarkFolderPath'),
   bookmarkTitle: document.querySelector('#bookmarkTitle'),
@@ -25,6 +26,7 @@ const elements = {
   bookmarkKeywordTokens: document.querySelector('#bookmarkKeywordTokens'),
   bookmarkKeywords: document.querySelector('#bookmarkKeywords'),
   bookmarkError: document.querySelector('#bookmarkError'),
+  bookmarkSkipButton: document.querySelector('#bookmarkSkipButton'),
   bookmarkDefaultButton: document.querySelector('#bookmarkDefaultButton'),
   bookmarkAcceptButton: document.querySelector('#bookmarkAcceptButton'),
   siteDiscovery: document.querySelector('#siteDiscovery'),
@@ -150,8 +152,14 @@ async function acceptPendingBookmark(useDefaultKeywords = false) {
 
 async function loadPendingBookmark() {
   const stored = await chrome.storage.local.get(BOOKMARK_PENDING_KEY);
-  pendingBookmark = (stored[BOOKMARK_PENDING_KEY] || [])[0] || null;
+  const pending = stored[BOOKMARK_PENDING_KEY] || [];
+  const requestedId = new URLSearchParams(window.location.search).get('bookmarkId');
+  pendingBookmark = pending.find((item) => String(item.id) === requestedId) || pending[pending.length - 1] || null;
   if (!pendingBookmark) return false;
+  elements.bookmarkSyncTitle.textContent = pendingBookmark.indexedWithDefaults
+    ? '新书签已加入快速访问'
+    : '新书签：设置搜索词以加入快速访问';
+  elements.bookmarkSkipButton.textContent = pendingBookmark.indexedWithDefaults ? '稍后修改' : '稍后设置';
   elements.bookmarkFolderPath.textContent = `已收藏到 · ${pendingBookmark.source?.groupPath?.join(' / ') || '书签'}`;
   elements.bookmarkTitle.textContent = pendingBookmark.title;
   const fallbackKeywords = XJTUSiteData.bookmarkTitleKeywords(pendingBookmark.title);
@@ -168,7 +176,6 @@ async function loadPendingBookmark() {
   favicon.addEventListener('error', () => favicon.remove());
   elements.bookmarkFaviconFallback.append(favicon);
   elements.bookmarkSync.hidden = false;
-  if (pendingBookmark.indexedWithDefaults) await resolvePendingBookmark();
   window.setTimeout(() => elements.bookmarkKeywords.focus(), 30);
   return true;
 }
@@ -319,6 +326,17 @@ elements.navigatorEnabled.addEventListener('change', async () => {
 });
 elements.bookmarkDefaultButton.addEventListener('click', () => acceptPendingBookmark(true));
 elements.bookmarkAcceptButton.addEventListener('click', () => acceptPendingBookmark(false));
+elements.bookmarkSkipButton.addEventListener('click', async () => {
+  if (!pendingBookmark) return;
+  const stored = await chrome.storage.local.get(BOOKMARK_PENDING_KEY);
+  const pending = stored[BOOKMARK_PENDING_KEY] || [];
+  const item = pending.find((entry) => String(entry.id) === String(pendingBookmark.id));
+  if (item) {
+    item.deferred = true;
+    await chrome.storage.local.set({ [BOOKMARK_PENDING_KEY]: pending });
+  }
+  window.close();
+});
 elements.bookmarkKeywordEditor.addEventListener('click', () => elements.bookmarkKeywords.focus());
 elements.bookmarkKeywords.addEventListener('keydown', (event) => {
   if (event.isComposing) return;
