@@ -20,7 +20,7 @@
       chrome.runtime.sendMessage({ action: 'getSiteDiscoverySessionDismissed', hostname }),
       XJTUSiteData.getSites()
     ]);
-    if (preferences[NAVIGATOR_ENABLED_KEY] === false || preferences[DISCOVERY_ENABLED_KEY] === false) return false;
+    if (preferences[NAVIGATOR_ENABLED_KEY] !== true || preferences[DISCOVERY_ENABLED_KEY] === false) return false;
     if ((preferences[DISCOVERY_IGNORED_HOSTS_KEY] || []).includes(hostname)) return false;
     if (sessionState?.dismissed) return false;
     return !sites.some((site) => {

@@ -757,7 +757,7 @@ async function injectSiteLauncher(tabId) {
 chrome.commands.onCommand.addListener(async (command, tab) => {
   if (command !== SITE_LAUNCHER_COMMAND) return;
   const navigatorState = await chrome.storage.local.get(SITE_NAVIGATOR_ENABLED_KEY);
-  if (navigatorState[SITE_NAVIGATOR_ENABLED_KEY] === false) return;
+  if (navigatorState[SITE_NAVIGATOR_ENABLED_KEY] !== true) return;
 
   let targetTab = tab;
   if (!Number.isInteger(targetTab?.id)) {
@@ -872,7 +872,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       chrome.storage.session.get(SITE_DISCOVERY_CANDIDATES_KEY)
     ])
       .then(([navigatorState, stored]) => {
-        if (navigatorState[SITE_NAVIGATOR_ENABLED_KEY] === false) return false;
+        if (navigatorState[SITE_NAVIGATOR_ENABLED_KEY] !== true) return false;
         const candidates = stored[SITE_DISCOVERY_CANDIDATES_KEY] || {};
         shouldOpenPopup = candidates[tabId]?.hostname !== candidate.hostname;
         return chrome.storage.session.set({

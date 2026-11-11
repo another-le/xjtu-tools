@@ -182,7 +182,7 @@ async function loadPendingBookmark() {
 
 async function loadNavigatorState() {
   const stored = await chrome.storage.local.get(XJTUSiteData.NAVIGATOR_ENABLED_KEY);
-  const enabled = stored[XJTUSiteData.NAVIGATOR_ENABLED_KEY] !== false;
+  const enabled = stored[XJTUSiteData.NAVIGATOR_ENABLED_KEY] === true;
   elements.navigatorEnabled.checked = enabled;
   elements.navigatorStateText.textContent = enabled
     ? '快捷键与新网站发现已开启'
