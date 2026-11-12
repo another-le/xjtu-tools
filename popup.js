@@ -386,6 +386,11 @@ function browserBookmarkRootFolder(name) {
   ]).has(name);
 }
 
+// Chrome 的根文件夹 ID 在所有平台上是固定的。把这些记为同步源，
+// 就能覆盖「直接收藏在书签栏 / 其他书签 / 移动设备书签顶层」的书签，
+// 包括「书签栏原本为空、之后第一次收藏」这种情况。
+const SELECTABLE_ROOT_FOLDER_IDS = ['1', '2', '3'];
+
 function bookmarkGroupDetails(bookmark) {
   const segments = (bookmark.folders || []).map((name, index) => ({
     name,
@@ -1506,8 +1511,11 @@ async function openBookmarkImporter() {
     expandedBookmarkFolderIds = new Set(bookmarkTree
       .filter((node) => node.type === 'folder')
       .map((node) => node.id));
-    selectedBookmarkIds = new Set();
-    selectedBookmarkFolderIds = new Set();
+    // 默认全选所有书签，并把每个文件夹都记为同步源：
+    // 用户不需要再手动挑选文件夹，之后新增的书签也会自动收录。
+    selectedBookmarkIds = new Set(allBookmarks.map((item) => item.id));
+    selectedBookmarkFolderIds = new Set(bookmarkFoldersInNodes(bookmarkTree, [])
+      .map((folder) => String(folder.id)));
     elements.bookmarkFilterInput.value = '';
     elements.bookmarkLayer.hidden = false;
     renderBookmarks();
@@ -1531,6 +1539,12 @@ async function importSelectedBookmarks() {
   const syncSettings = await chrome.storage.local.get(BOOKMARK_SYNC_FOLDER_IDS_KEY);
   const syncedFolderIds = new Set((syncSettings[BOOKMARK_SYNC_FOLDER_IDS_KEY] || []).map(String));
   selectedBookmarkFolderIds.forEach((folderId) => syncedFolderIds.add(String(folderId)));
+  // 同步源包含浏览器根目录（书签栏 / 其他书签）时，说明用户要的是「全部书签」，
+  // 此时顶层直接收藏的书签也要算作已同步，否则它们不会被自动收录。
+  const allSelected = allBookmarks.length > 0 && selected.length === allBookmarks.length;
+  if (allSelected) {
+    SELECTABLE_ROOT_FOLDER_IDS.forEach((id) => syncedFolderIds.add(id));
+  }
 
   selected.forEach((bookmark, index) => {
     const parsedUrl = new URL(bookmark.url);
@@ -1543,7 +1557,7 @@ async function importSelectedBookmarks() {
       folders: [...bookmark.folders],
       folderIds: [...bookmark.folderIds],
       groupPath: [...groupPath],
-      syncMode: (bookmark.folderIds || []).some((folderId) =>
+      syncMode: allSelected || (bookmark.folderIds || []).some((folderId) =>
         selectedBookmarkFolderIds.has(String(folderId))) ? 'folder' : 'bookmark'
     };
     const bookmarkUrlKey = XJTUSiteData.canonicalUrlKey(parsedUrl.href);
