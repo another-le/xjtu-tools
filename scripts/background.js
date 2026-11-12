@@ -26,6 +26,12 @@ const SITE_ENTRIES_KEY = 'siteNavigatorEntriesV1';
 const BOOKMARK_SYNC_FOLDER_IDS_KEY = 'siteNavigatorBookmarkSyncFolderIdsV1';
 const BOOKMARK_PENDING_KEY = 'siteNavigatorPendingBookmarksV1';
 const BOOKMARK_GROUP_ROOT_KEY = 'siteNavigatorBookmarkGroupRootV1';
+// 记住「关闭总开关的时刻」。关闭期间完全不记录书签，重新打开时用书签自带的
+// dateAdded 与这个时间对比，即可算出关闭期间新增了哪些书签。
+const NAVIGATOR_DISABLED_AT_KEY = 'siteNavigatorDisabledAtV1';
+// 用户点过「忽略」的网址：这些网址直接当作已有关键词，不再弹出提醒。
+// 按规范化网址记录而不是书签 ID，删除后重新收藏也能命中。
+const BOOKMARK_IGNORED_URLS_KEY = 'siteNavigatorIgnoredBookmarkUrlsV1';
 
 function isBrowserBookmarkRoot(name) {
   return new Set([
@@ -131,6 +137,36 @@ function collectRemovedBookmarkTree(node, bookmarkIds = new Set(), folderIds = n
   return { bookmarkIds, folderIds };
 }
 
+function collectBookmarksAddedAfter(node, since, collected = []) {
+  (node.children || []).forEach((child) => collectBookmarksAddedAfter(child, since, collected));
+  // 只统计网页书签；文件夹本身不算「新收藏」。
+  if (node.url && Number(node.dateAdded) > since) collected.push(node);
+  return collected;
+}
+
+async function countBookmarksAddedSince(disabledAt) {
+  if (!Number(disabledAt)) return [];
+  try {
+    const [tree, stored] = await Promise.all([
+      chrome.bookmarks.getTree(),
+      chrome.storage.local.get(SITE_ENTRIES_KEY)
+    ]);
+    const sites = Array.isArray(stored[SITE_ENTRIES_KEY]) ? stored[SITE_ENTRIES_KEY] : [];
+    // 已经收录过、带有搜索词的书签不需要再提醒。
+    const indexed = new Set();
+    sites.forEach((site) =>
+      (site.sourceBookmarkIds || []).forEach((id) => indexed.add(String(id))));
+    // 扫描的是当前书签树：关闭期间新增、之后又被删除的书签已经不在树里，
+    // 因此不会被统计，也就不会在重新开启时打扰用户。
+    const added = [];
+    tree.forEach((root) => collectBookmarksAddedAfter(root, disabledAt, added));
+    return added.filter((node) => !indexed.has(String(node.id)));
+  } catch (error) {
+    console.warn('[Bookmark Sync] 无法统计关闭期间新增书签:', error);
+    return [];
+  }
+}
+
 async function removeBookmarkSources(removedNode, { preservePending = false } = {}) {
   const removed = collectRemovedBookmarkTree(removedNode);
   const stored = await chrome.storage.local.get([
@@ -190,13 +226,26 @@ async function removeBookmarkSources(removedNode, { preservePending = false } = 
 
 async function openPendingBookmarkPrompt(bookmarkId) {
   const [pendingState, bookmarks] = await Promise.all([
-    chrome.storage.local.get([BOOKMARK_PENDING_KEY, BOOKMARK_SYNC_FOLDER_IDS_KEY, SITE_ENTRIES_KEY]),
+    chrome.storage.local.get([
+      BOOKMARK_PENDING_KEY,
+      BOOKMARK_SYNC_FOLDER_IDS_KEY,
+      SITE_ENTRIES_KEY,
+      BOOKMARK_IGNORED_URLS_KEY
+    ]),
     chrome.bookmarks.get(String(bookmarkId)).catch(() => [])
   ]);
   const pending = pendingState[BOOKMARK_PENDING_KEY] || [];
   const item = pending.find((bookmark) => String(bookmark.id) === String(bookmarkId));
   const node = bookmarks[0];
   if (!item || !node?.url) return false;
+  // 网址被忽略过就不再打扰用户，同时把这个残留的待处理项清掉。
+  const ignoredUrls = new Set((pendingState[BOOKMARK_IGNORED_URLS_KEY] || []).map(String));
+  if (ignoredUrls.has(XJTUSiteData.canonicalUrlKey(node.url))) {
+    const remaining = pending.filter((entry) => String(entry.id) !== String(bookmarkId));
+    await chrome.storage.local.set({ [BOOKMARK_PENDING_KEY]: remaining });
+    if (!remaining.length) await chrome.action.setBadgeText({ text: '' });
+    return false;
+  }
   const source = await bookmarkSourceFromNode(node);
   const syncedFolderIds = new Set((pendingState[BOOKMARK_SYNC_FOLDER_IDS_KEY] || []).map(String));
   const indexed = (pendingState[SITE_ENTRIES_KEY] || []).some((site) =>
@@ -254,14 +303,18 @@ async function openPendingBookmarkPrompt(bookmarkId) {
   return false;
 }
 
-async function queueCreatedBookmark(node) {
+async function queueCreatedBookmark(node, { suppressPrompt = false } = {}) {
   const stored = await chrome.storage.local.get([
     BOOKMARK_SYNC_FOLDER_IDS_KEY,
     BOOKMARK_PENDING_KEY,
-    SITE_ENTRIES_KEY
+    SITE_ENTRIES_KEY,
+    BOOKMARK_IGNORED_URLS_KEY
   ]);
   const syncedFolderIds = new Set((stored[BOOKMARK_SYNC_FOLDER_IDS_KEY] || []).map(String));
   if (!node.url) return;
+  // 用户对这个网址点过「忽略」：视为已有关键词，不再提醒、也不进待处理队列。
+  const ignoredUrls = new Set((stored[BOOKMARK_IGNORED_URLS_KEY] || []).map(String));
+  if (ignoredUrls.has(XJTUSiteData.canonicalUrlKey(node.url))) return;
   const bookmarkSource = await bookmarkSourceFromNode(node);
   const folderSynced = bookmarkSource.folderIds.some((id) => syncedFolderIds.has(id));
   const sites = Array.isArray(stored[SITE_ENTRIES_KEY]) ? stored[SITE_ENTRIES_KEY] : [];
@@ -337,7 +390,7 @@ async function queueCreatedBookmark(node) {
   await chrome.action.setBadgeBackgroundColor({ color: '#c92b37' });
   await chrome.action.setBadgeText({ text: '+' });
   await chrome.action.setTitle({ title: '新书签等待设置搜索词' });
-  await openPendingBookmarkPrompt(node.id);
+  if (!suppressPrompt) await openPendingBookmarkPrompt(node.id);
 }
 
 async function syncMovedBookmarkNode(bookmarkId, parentId) {
@@ -626,8 +679,15 @@ chrome.windows.onCreated.addListener((createdWindow) => {
 
 chrome.bookmarks.onCreated.addListener((_id, node) => {
   if (bookmarkImportInProgress) return;
-  queueCreatedBookmark(node).catch((error) =>
-    console.warn('[Bookmark Sync] 无法处理新增书签:', error));
+  // 总开关关闭时完全不处理新书签：不记录、不挂徽标、不弹面板。
+  // 关闭期间新增的书签会在重新开启时按 dateAdded 统一统计。
+  chrome.storage.local.get(SITE_NAVIGATOR_ENABLED_KEY)
+    .then((state) => {
+      if (state[SITE_NAVIGATOR_ENABLED_KEY] !== true) return;
+      return queueCreatedBookmark(node);
+    })
+    .catch((error) =>
+      console.warn('[Bookmark Sync] 无法处理新增书签:', error));
 });
 chrome.bookmarks.onImportBegan.addListener(() => {
   bookmarkImportInProgress = true;
@@ -644,8 +704,15 @@ chrome.bookmarks.onMoved.addListener((id, moveInfo) => {
     console.warn('[Bookmark Sync] 无法同步书签移动:', error));
 });
 chrome.bookmarks.onRemoved.addListener((_id, removeInfo) => {
-  removeBookmarkSources(removeInfo.node).catch((error) =>
-    console.warn('[Bookmark Sync] 无法同步书签删除:', error));
+  // 关闭状态下不做同步，也不碰徽标。关闭期间删掉的书签会自然地从
+  // 书签树消失，重新开启时按 dateAdded 统计也不会再算到它。
+  chrome.storage.local.get(SITE_NAVIGATOR_ENABLED_KEY)
+    .then((state) => {
+      if (state[SITE_NAVIGATOR_ENABLED_KEY] !== true) return;
+      return removeBookmarkSources(removeInfo.node);
+    })
+    .catch((error) =>
+      console.warn('[Bookmark Sync] 无法同步书签删除:', error));
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
@@ -832,13 +899,67 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === 'getBacklogBookmarks') {
+    // 供面板随时查询「关闭期间新增的书签」，不修改任何状态。
+    chrome.storage.local.get(NAVIGATOR_DISABLED_AT_KEY)
+      .then(async (stored) => {
+        const added = await countBookmarksAddedSince(stored[NAVIGATOR_DISABLED_AT_KEY]);
+        sendResponse({ ok: true, addedCount: added.length, addedIds: added.map((node) => String(node.id)) });
+      })
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+
+  if (message.action === 'dismissBacklogBookmarks') {
+    // 用户选择「暂不处理」：清掉关闭时刻，避免每次打开面板都提示。
+    chrome.storage.local.remove(NAVIGATOR_DISABLED_AT_KEY)
+      .then(() => sendResponse({ ok: true }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+
+  if (message.action === 'queueBacklogBookmarks') {
+    // 用户确认要处理「关闭期间新增的书签」：逐个补回待处理队列。
+    (async () => {
+      const ids = Array.isArray(message.ids) ? message.ids.map(String) : [];
+      for (const id of ids) {
+        try {
+          const [node] = await chrome.bookmarks.get(id);
+          if (!node?.url) continue;
+          await queueCreatedBookmark(node, { suppressPrompt: true });
+        } catch (_error) {
+          // 书签可能已被删除，跳过即可。
+        }
+      }
+      // 已转成待处理项，清除关闭时刻，避免提示条反复出现。
+      await chrome.storage.local.remove(NAVIGATOR_DISABLED_AT_KEY);
+      sendResponse({ ok: true });
+    })().catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+
   if (message.action === 'setSiteNavigatorEnabled') {
     if (message.enabled) {
-      sendResponse({ ok: true });
-      return false;
+      // 重新开启：对比「关闭时刻」与书签的 dateAdded，统计期间新增的书签。
+      // 这里不删除关闭时刻，便于用户稍后再次打开面板时仍能看到提示；
+      // 清除时机交给「去看这些书签」或「暂不处理」。
+      chrome.storage.local.get(NAVIGATOR_DISABLED_AT_KEY)
+        .then(async (stored) => {
+          const added = await countBookmarksAddedSince(stored[NAVIGATOR_DISABLED_AT_KEY]);
+          sendResponse({ ok: true, addedCount: added.length, addedIds: added.map((node) => String(node.id)) });
+        })
+        .catch(() => sendResponse({ ok: false }));
+      return true;
     }
     chrome.storage.session.get(SITE_DISCOVERY_CANDIDATES_KEY)
       .then(async (stored) => {
+        // 记下关闭时刻，供重新开启时统计；关闭期间不再处理任何新书签。
+        // 若已存在更早的关闭时刻（上次关闭的积压还没处理），保留它，
+        // 避免把这段窗口缩短、漏掉先前新增的书签。
+        const previous = await chrome.storage.local.get(NAVIGATOR_DISABLED_AT_KEY);
+        const existing = Number(previous[NAVIGATOR_DISABLED_AT_KEY]);
+        const disabledAt = existing ? Math.min(existing, Date.now()) : Date.now();
+        await chrome.storage.local.set({ [NAVIGATOR_DISABLED_AT_KEY]: disabledAt });
         const tabIds = Object.keys(stored[SITE_DISCOVERY_CANDIDATES_KEY] || {}).map(Number);
         await Promise.all(tabIds.map((tabId) => clearSiteDiscoveryCandidate(tabId)));
         await chrome.storage.session.remove(SITE_DISCOVERY_CANDIDATES_KEY);

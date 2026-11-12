@@ -33,6 +33,10 @@ h1 { font-family:Bahnschrift,Aptos,sans-serif; font-size:16px; font-weight:650; 
 .navigator-switch input:checked+span { background:var(--red); }
 .navigator-switch input:checked+span::after { transform:translateX(13px); }
 .navigator-switch input:focus-visible+span { outline:2px solid rgba(217,54,62,.3); outline-offset:2px; }
+.navigator-backlog { padding:11px 17px 12px; background:#fffaf0; border-bottom:1px solid #ecdfc4; }
+.navigator-backlog p { color:#7a6329; font-size:10px; line-height:1.5; }
+.navigator-backlog p strong { color:#8a5a12; font-weight:650; }
+.navigator-backlog .discovery-question { margin-top:9px; }
 .site-discovery,.bookmark-sync { padding:14px 17px 15px; background:#fff9f9; border-bottom:1px solid #ead8da; }
 .discovery-heading { display:flex; align-items:center; gap:9px; }
 .discovery-heading>div { display:flex; min-width:0; flex-direction:column; }
@@ -51,7 +55,9 @@ h1 { font-family:Bahnschrift,Aptos,sans-serif; font-size:16px; font-weight:650; 
 .bookmark-keyword-token button { width:14px; height:14px; padding:0; color:#8c7779; background:transparent; border:0; border-radius:2px; cursor:pointer; font:13px/1 Aptos,sans-serif; }
 .bookmark-keyword-token button:hover { color:#a3212d; background:#ead7d9; }
 .bookmark-keyword-editor input { width:105px; min-width:80px; height:23px; flex:1 1 105px; padding:0 2px; color:var(--ink); background:transparent; border:0; outline:0; font-size:10.5px; }
-.discovery-question { display:flex; justify-content:flex-end; gap:6px; margin-top:11px; }
+.discovery-question { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; margin-top:11px; }
+/* 「忽略」靠左，和右侧的确认类操作分开，避免误点。 */
+.discovery-question #bookmarkIgnoreButton { margin-right:auto; }
 .discovery-question button { min-height:29px; padding:0 9px; color:#5e5859; background:#fff; border:1px solid #ddd7d8; border-radius:4px; cursor:pointer; font-size:9.5px; }
 .discovery-question button:hover { background:#f7f4f4; }
 .discovery-question .discovery-primary { color:#fff; background:var(--red); border-color:var(--red); }

@@ -28,6 +28,14 @@
       </label>
     </section>
 
+    <section class="navigator-backlog" id="navigatorBacklog" hidden>
+      <p id="navigatorBacklogText"></p>
+      <div class="discovery-question">
+        <button id="navigatorBacklogDismiss" type="button">暂不处理</button>
+        <button class="discovery-primary" id="navigatorBacklogReview" type="button">去看这些书签</button>
+      </div>
+    </section>
+
     <section class="bookmark-sync" id="bookmarkSync" hidden>
       <div class="discovery-heading">
         <span class="discovery-favicon" id="bookmarkFaviconFallback">＋</span>
@@ -47,6 +55,7 @@
       </label>
       <span class="discovery-error" id="bookmarkError"></span>
       <div class="discovery-question">
+        <button id="bookmarkIgnoreButton" type="button" title="使用默认关键词收录，以后不再提醒这个网址">忽略</button>
         <button id="bookmarkSkipButton" type="button">稍后设置</button>
         <button id="bookmarkDefaultButton" type="button">使用默认关键词</button>
         <button class="discovery-primary" id="bookmarkAcceptButton" type="button">保存修改</button>

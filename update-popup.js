@@ -1,6 +1,8 @@
 const REPOSITORY_URL = 'https://github.com/another-le/xjtu-tools';
 const DISMISSED_UPDATE_VERSION_KEY = 'dismissedUpdateVersion';
 const BOOKMARK_PENDING_KEY = 'siteNavigatorPendingBookmarksV1';
+const NAVIGATOR_DISABLED_AT_KEY = 'siteNavigatorDisabledAtV1';
+const BOOKMARK_IGNORED_URLS_KEY = 'siteNavigatorIgnoredBookmarkUrlsV1';
 
 const elements = {
   statusIndicator: document.querySelector('#statusIndicator'),
@@ -17,6 +19,10 @@ const elements = {
   repositoryButton: document.querySelector('#repositoryButton'),
   navigatorEnabled: document.querySelector('#navigatorEnabled'),
   navigatorStateText: document.querySelector('#navigatorStateText'),
+  navigatorBacklog: document.querySelector('#navigatorBacklog'),
+  navigatorBacklogText: document.querySelector('#navigatorBacklogText'),
+  navigatorBacklogDismiss: document.querySelector('#navigatorBacklogDismiss'),
+  navigatorBacklogReview: document.querySelector('#navigatorBacklogReview'),
   bookmarkSync: document.querySelector('#bookmarkSync'),
   bookmarkSyncTitle: document.querySelector('#bookmarkSyncTitle'),
   bookmarkFaviconFallback: document.querySelector('#bookmarkFaviconFallback'),
@@ -27,6 +33,7 @@ const elements = {
   bookmarkKeywords: document.querySelector('#bookmarkKeywords'),
   bookmarkError: document.querySelector('#bookmarkError'),
   bookmarkSkipButton: document.querySelector('#bookmarkSkipButton'),
+  bookmarkIgnoreButton: document.querySelector('#bookmarkIgnoreButton'),
   bookmarkDefaultButton: document.querySelector('#bookmarkDefaultButton'),
   bookmarkAcceptButton: document.querySelector('#bookmarkAcceptButton'),
   siteDiscovery: document.querySelector('#siteDiscovery'),
@@ -38,6 +45,7 @@ let currentUpdateInfo = null;
 let discoveryCandidate = null;
 let pendingBookmark = null;
 let pendingKeywords = [];
+let backlogBookmarkIds = [];
 
 function addPendingKeyword(rawKeyword) {
   const keyword = String(rawKeyword || '').trim().replace(/\s+/g, ' ').slice(0, 40);
@@ -87,12 +95,14 @@ async function resolvePendingBookmark() {
     : 'XJTU Tools' });
 }
 
-async function acceptPendingBookmark(useDefaultKeywords = false) {
+async function acceptPendingBookmark(useDefaultKeywords = false, ignoreUrl = false) {
   if (!pendingBookmark) return;
   const fallbackKeywords = XJTUSiteData.bookmarkTitleKeywords(pendingBookmark.title);
   const defaultKeywords = pendingBookmark.defaultKeywords?.length
     ? pendingBookmark.defaultKeywords
     : (fallbackKeywords.length ? fallbackKeywords : [pendingBookmark.title].filter(Boolean));
+  // 「忽略」= 用默认关键词收录 + 记住这个网址，以后不再提醒。
+  if (ignoreUrl) useDefaultKeywords = true;
   if (!useDefaultKeywords) commitPendingKeyword();
   const keywords = useDefaultKeywords ? defaultKeywords : [...pendingKeywords];
   if (!keywords.length) {
@@ -146,6 +156,17 @@ async function acceptPendingBookmark(useDefaultKeywords = false) {
     });
   }
   await XJTUSiteData.saveSites(sites);
+  if (ignoreUrl) {
+    // 记录规范化网址，删除书签后重新收藏也不会再提醒。
+    const stored = await chrome.storage.local.get(BOOKMARK_IGNORED_URLS_KEY);
+    const ignored = [...new Set((stored[BOOKMARK_IGNORED_URLS_KEY] || []).map(String))];
+    const urlKey = XJTUSiteData.canonicalUrlKey(pendingBookmark.url);
+    if (!ignored.includes(urlKey)) ignored.push(urlKey);
+    // 只保留最近 2000 条，避免长期使用后无限增长。
+    await chrome.storage.local.set({
+      [BOOKMARK_IGNORED_URLS_KEY]: ignored.slice(-2000)
+    });
+  }
   await resolvePendingBookmark();
   window.close();
 }
@@ -180,14 +201,41 @@ async function loadPendingBookmark() {
   return true;
 }
 
+function renderNavigatorBacklog(count, ids) {
+  backlogBookmarkIds = Array.isArray(ids) ? ids : [];
+  elements.navigatorBacklogText.innerHTML = '';
+  elements.navigatorBacklogText.append(
+    '关闭期间新增了 ',
+    Object.assign(document.createElement('strong'), { textContent: `${count} 个书签` }),
+    '，还没有设置搜索词。'
+  );
+  elements.navigatorBacklog.hidden = false;
+}
+
 async function loadNavigatorState() {
-  const stored = await chrome.storage.local.get(XJTUSiteData.NAVIGATOR_ENABLED_KEY);
+  const stored = await chrome.storage.local.get([
+    XJTUSiteData.NAVIGATOR_ENABLED_KEY,
+    NAVIGATOR_DISABLED_AT_KEY
+  ]);
   const enabled = stored[XJTUSiteData.NAVIGATOR_ENABLED_KEY] === true;
   elements.navigatorEnabled.checked = enabled;
   elements.navigatorStateText.textContent = enabled
     ? '快捷键与新网站发现已开启'
     : '快捷键与新网站发现已关闭';
-  if (!enabled) elements.siteDiscovery.hidden = true;
+  if (!enabled) {
+    elements.siteDiscovery.hidden = true;
+    elements.navigatorBacklog.hidden = true;
+    return enabled;
+  }
+  // 面板可能在用户重新开启后再次打开，这里补一次检查，
+  // 让「关闭期间新增的书签」不会因为面板关闭而错过提示。
+  const disabledAt = stored[NAVIGATOR_DISABLED_AT_KEY];
+  if (Number(disabledAt)) {
+    const response = await chrome.runtime.sendMessage({ action: 'getBacklogBookmarks' });
+    if (response?.addedCount > 0) {
+      renderNavigatorBacklog(response.addedCount, response.addedIds || []);
+    }
+  }
   return enabled;
 }
 
@@ -318,12 +366,48 @@ elements.dismissReminder.addEventListener('change', (event) => setReminderDismis
 elements.navigatorEnabled.addEventListener('change', async () => {
   const enabled = elements.navigatorEnabled.checked;
   await chrome.storage.local.set({ [XJTUSiteData.NAVIGATOR_ENABLED_KEY]: enabled });
-  await chrome.runtime.sendMessage({ action: 'setSiteNavigatorEnabled', enabled });
+  const response = await chrome.runtime.sendMessage({ action: 'setSiteNavigatorEnabled', enabled });
   elements.navigatorStateText.textContent = enabled
     ? '快捷键与新网站发现已开启'
     : '快捷键与新网站发现已关闭';
-  if (!enabled) elements.siteDiscovery.hidden = true;
+  if (!enabled) {
+    elements.siteDiscovery.hidden = true;
+    elements.navigatorBacklog.hidden = true;
+    return;
+  }
+  // 重新开启时，若关闭期间新增过书签，提示用户有积压待处理。
+  const addedCount = response?.addedCount || 0;
+  if (addedCount > 0) {
+    renderNavigatorBacklog(addedCount, response?.addedIds || []);
+  } else {
+    elements.navigatorBacklog.hidden = true;
+  }
 });
+elements.navigatorBacklogDismiss.addEventListener('click', async () => {
+  elements.navigatorBacklog.hidden = true;
+  backlogBookmarkIds = [];
+  await chrome.runtime.sendMessage({ action: 'dismissBacklogBookmarks' });
+});
+elements.navigatorBacklogReview.addEventListener('click', async () => {
+  if (!backlogBookmarkIds.length) {
+    elements.navigatorBacklog.hidden = true;
+    return;
+  }
+  elements.navigatorBacklogReview.disabled = true;
+  try {
+    await chrome.runtime.sendMessage({
+      action: 'queueBacklogBookmarks',
+      ids: backlogBookmarkIds
+    });
+    elements.navigatorBacklog.hidden = true;
+    backlogBookmarkIds = [];
+    // 补回队列后直接进入第一个待处理书签。
+    await loadPendingBookmark();
+  } finally {
+    elements.navigatorBacklogReview.disabled = false;
+  }
+});
+elements.bookmarkIgnoreButton.addEventListener('click', () => acceptPendingBookmark(true, true));
 elements.bookmarkDefaultButton.addEventListener('click', () => acceptPendingBookmark(true));
 elements.bookmarkAcceptButton.addEventListener('click', () => acceptPendingBookmark(false));
 elements.bookmarkSkipButton.addEventListener('click', async () => {
