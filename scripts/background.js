@@ -308,8 +308,12 @@ async function queueCreatedBookmark(node, { suppressPrompt = false } = {}) {
     BOOKMARK_SYNC_FOLDER_IDS_KEY,
     BOOKMARK_PENDING_KEY,
     SITE_ENTRIES_KEY,
-    BOOKMARK_IGNORED_URLS_KEY
+    BOOKMARK_IGNORED_URLS_KEY,
+    SITE_NAVIGATOR_ENABLED_KEY
   ]);
+  // 兜底：总开关关闭时一律不入队、不弹窗。调用方可能来自书签移动
+  // 等其它路径，单靠 onCreated 的检查不足以覆盖全部入口。
+  if (stored[SITE_NAVIGATOR_ENABLED_KEY] !== true) return;
   const syncedFolderIds = new Set((stored[BOOKMARK_SYNC_FOLDER_IDS_KEY] || []).map(String));
   if (!node.url) return;
   // 用户对这个网址点过「忽略」：视为已有关键词，不再提醒、也不进待处理队列。
@@ -960,6 +964,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const existing = Number(previous[NAVIGATOR_DISABLED_AT_KEY]);
         const disabledAt = existing ? Math.min(existing, Date.now()) : Date.now();
         await chrome.storage.local.set({ [NAVIGATOR_DISABLED_AT_KEY]: disabledAt });
+        // 关闭时清空待处理队列与徽标：这些项目是关闭前遗留的，
+        // 若不清掉，每次打开面板仍会弹出，看起来像静默没有生效。
+        // 它们的书签本身仍在浏览器里，重新开启后会按 dateAdded 重新统计。
+        await chrome.storage.local.set({ [BOOKMARK_PENDING_KEY]: [] });
+        await chrome.action.setBadgeText({ text: '' });
+        await chrome.action.setTitle({ title: 'XJTU Tools' });
         const tabIds = Object.keys(stored[SITE_DISCOVERY_CANDIDATES_KEY] || {}).map(Number);
         await Promise.all(tabIds.map((tabId) => clearSiteDiscoveryCandidate(tabId)));
         await chrome.storage.session.remove(SITE_DISCOVERY_CANDIDATES_KEY);

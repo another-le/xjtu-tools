@@ -172,10 +172,26 @@ async function acceptPendingBookmark(useDefaultKeywords = false, ignoreUrl = fal
 }
 
 async function loadPendingBookmark() {
-  const stored = await chrome.storage.local.get(BOOKMARK_PENDING_KEY);
+  const stored = await chrome.storage.local.get([
+    BOOKMARK_PENDING_KEY,
+    XJTUSiteData.NAVIGATOR_ENABLED_KEY
+  ]);
+  // 总开关关闭时不要显示待处理书签：否则关闭期间收藏遗留的队列项
+  // 仍会在每次打开面板时冒出来，用户会以为静默没生效。
+  if (stored[XJTUSiteData.NAVIGATOR_ENABLED_KEY] !== true) {
+    elements.bookmarkSync.hidden = true;
+    return false;
+  }
   const pending = stored[BOOKMARK_PENDING_KEY] || [];
   const requestedId = new URLSearchParams(window.location.search).get('bookmarkId');
-  pendingBookmark = pending.find((item) => String(item.id) === requestedId) || pending[pending.length - 1] || null;
+  // 主动指定 bookmarkId 时一定是刚收藏触发的，照常显示；
+  // 否则跳过用户点过「稍后设置」的项目，避免每次打开面板都被同一项拦住。
+  const candidates = requestedId
+    ? pending
+    : pending.filter((item) => !item.deferred);
+  pendingBookmark = requestedId
+    ? (pending.find((item) => String(item.id) === requestedId) || null)
+    : (candidates[candidates.length - 1] || null);
   if (!pendingBookmark) return false;
   elements.bookmarkSyncTitle.textContent = pendingBookmark.indexedWithDefaults
     ? '新书签已加入快速访问'
