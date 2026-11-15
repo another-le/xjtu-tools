@@ -33,6 +33,29 @@ const NAVIGATOR_DISABLED_AT_KEY = 'siteNavigatorDisabledAtV1';
 // 按规范化网址记录而不是书签 ID，删除后重新收藏也能命中。
 const BOOKMARK_IGNORED_URLS_KEY = 'siteNavigatorIgnoredBookmarkUrlsV1';
 
+/**
+ * 网站快速启动器的总开关门禁。
+ *
+ * 开关关闭时，与书签/网站发现/启动器相关的一切都不做：
+ * 不记录书签、不挂徽标、不弹面板、不同步文件夹改名与删除。
+ *
+ * 判断语义：只有显式写入 `true` 才算开启。未设置（老用户从未开过）
+ * 与 `false` 一律按关闭处理，新安装用户默认静默。
+ */
+async function isNavigatorEnabled() {
+  const stored = await chrome.storage.local.get(SITE_NAVIGATOR_ENABLED_KEY);
+  return stored[SITE_NAVIGATOR_ENABLED_KEY] === true;
+}
+
+/** 把一个处理函数包成「仅当总开关开启时才执行」，失败只记日志不外抛。 */
+function whenNavigatorEnabled(label, handler) {
+  return (...args) => {
+    isNavigatorEnabled()
+      .then((enabled) => (enabled ? handler(...args) : undefined))
+      .catch((error) => console.warn(`[Navigator] ${label}失败:`, error));
+  };
+}
+
 function isBrowserBookmarkRoot(name) {
   return new Set([
     '书签栏', '其他书签', '移动设备书签',
@@ -230,10 +253,14 @@ async function openPendingBookmarkPrompt(bookmarkId) {
       BOOKMARK_PENDING_KEY,
       BOOKMARK_SYNC_FOLDER_IDS_KEY,
       SITE_ENTRIES_KEY,
-      BOOKMARK_IGNORED_URLS_KEY
+      BOOKMARK_IGNORED_URLS_KEY,
+      SITE_NAVIGATOR_ENABLED_KEY
     ]),
     chrome.bookmarks.get(String(bookmarkId)).catch(() => [])
   ]);
+  // 最内层守卫：任何调用路径走到这里时，只要总开关关闭就绝不弹面板。
+  // 上面的各个入口都有自己的检查，这里再兜一次，避免将来新增调用方漏检查。
+  if (pendingState[SITE_NAVIGATOR_ENABLED_KEY] !== true) return false;
   const pending = pendingState[BOOKMARK_PENDING_KEY] || [];
   const item = pending.find((bookmark) => String(bookmark.id) === String(bookmarkId));
   const node = bookmarks[0];
@@ -283,6 +310,7 @@ async function openPendingBookmarkPrompt(bookmarkId) {
     if (!Number.isInteger(windowId)) continue;
 
     try {
+      console.warn('[Navigator] 打开面板: 新书签提醒, id=', bookmarkId);
       await chrome.action.openPopup({ windowId });
     } catch (error) {
       lastError = error;
@@ -642,6 +670,7 @@ async function checkForUpdates() {
         throw new Error('没有可用的浏览器窗口');
       }
 
+      console.warn('[Navigator] 打开面板: 更新提醒');
       await chrome.action.openPopup({ windowId: activeWindow.id });
     } catch (error) {
       // 工具栏 Popup 无法展开时仅保留 NEW 徽标，不额外创建窗口打扰用户。
@@ -660,8 +689,35 @@ function scheduleAutomaticUpdateCheck() {
   });
 }
 
-chrome.runtime.onStartup.addListener(scheduleAutomaticUpdateCheck);
-chrome.runtime.onInstalled.addListener(scheduleAutomaticUpdateCheck);
+// 启动自愈：总开关关闭时，清掉上个版本可能残留的待处理队列与徽标。
+// 早期版本在关闭状态下仍会把书签写进队列，升级后这些残留项会让用户
+// 误以为「关了还在弹」。书签本身仍在浏览器里，重新开启时会重新统计。
+async function pruneNavigatorStateWhenDisabled() {
+  try {
+    const stored = await chrome.storage.local.get([
+      SITE_NAVIGATOR_ENABLED_KEY,
+      BOOKMARK_PENDING_KEY
+    ]);
+    if (stored[SITE_NAVIGATOR_ENABLED_KEY] === true) return;
+    const pending = stored[BOOKMARK_PENDING_KEY] || [];
+    if (pending.length) {
+      await chrome.storage.local.set({ [BOOKMARK_PENDING_KEY]: [] });
+    }
+    await chrome.action.setBadgeText({ text: '' });
+    await chrome.action.setTitle({ title: 'XJTU Tools' });
+  } catch (error) {
+    console.warn('[Bookmark Sync] 初始化清理失败:', error);
+  }
+}
+
+chrome.runtime.onStartup.addListener(() => {
+  pruneNavigatorStateWhenDisabled();
+  scheduleAutomaticUpdateCheck();
+});
+chrome.runtime.onInstalled.addListener(() => {
+  pruneNavigatorStateWhenDisabled();
+  scheduleAutomaticUpdateCheck();
+});
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === STARTUP_UPDATE_ALARM_NAME) {
     checkForUpdates();
@@ -681,43 +737,25 @@ chrome.windows.onCreated.addListener((createdWindow) => {
   });
 });
 
-chrome.bookmarks.onCreated.addListener((_id, node) => {
+// 书签事件统一入口：总开关关闭时一律不处理。
+// 关闭期间新增的书签会在重新开启时按 dateAdded 统一统计，
+// 因此这里直接跳过是安全的，不会漏掉用户的书签。
+chrome.bookmarks.onCreated.addListener(whenNavigatorEnabled('处理新增书签', (_id, node) => {
   if (bookmarkImportInProgress) return;
-  // 总开关关闭时完全不处理新书签：不记录、不挂徽标、不弹面板。
-  // 关闭期间新增的书签会在重新开启时按 dateAdded 统一统计。
-  chrome.storage.local.get(SITE_NAVIGATOR_ENABLED_KEY)
-    .then((state) => {
-      if (state[SITE_NAVIGATOR_ENABLED_KEY] !== true) return;
-      return queueCreatedBookmark(node);
-    })
-    .catch((error) =>
-      console.warn('[Bookmark Sync] 无法处理新增书签:', error));
-});
+  return queueCreatedBookmark(node);
+}));
 chrome.bookmarks.onImportBegan.addListener(() => {
   bookmarkImportInProgress = true;
 });
 chrome.bookmarks.onImportEnded.addListener(() => {
   bookmarkImportInProgress = false;
 });
-chrome.bookmarks.onChanged.addListener((id) => {
-  syncChangedBookmarkNode(id).catch((error) =>
-    console.warn('[Bookmark Sync] 无法同步书签改动:', error));
-});
-chrome.bookmarks.onMoved.addListener((id, moveInfo) => {
-  syncMovedBookmarkNode(id, moveInfo.parentId).catch((error) =>
-    console.warn('[Bookmark Sync] 无法同步书签移动:', error));
-});
-chrome.bookmarks.onRemoved.addListener((_id, removeInfo) => {
-  // 关闭状态下不做同步，也不碰徽标。关闭期间删掉的书签会自然地从
-  // 书签树消失，重新开启时按 dateAdded 统计也不会再算到它。
-  chrome.storage.local.get(SITE_NAVIGATOR_ENABLED_KEY)
-    .then((state) => {
-      if (state[SITE_NAVIGATOR_ENABLED_KEY] !== true) return;
-      return removeBookmarkSources(removeInfo.node);
-    })
-    .catch((error) =>
-      console.warn('[Bookmark Sync] 无法同步书签删除:', error));
-});
+chrome.bookmarks.onChanged.addListener(whenNavigatorEnabled('同步书签改动', (id) =>
+  syncChangedBookmarkNode(id)));
+chrome.bookmarks.onMoved.addListener(whenNavigatorEnabled('同步书签移动', (id, moveInfo) =>
+  syncMovedBookmarkNode(id, moveInfo.parentId)));
+chrome.bookmarks.onRemoved.addListener(whenNavigatorEnabled('同步书签删除', (_id, removeInfo) =>
+  removeBookmarkSources(removeInfo.node)));
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (!changeInfo.url) return;
@@ -783,6 +821,7 @@ async function openLauncherFallback(tab) {
       // 这种 Popup 由浏览器承载，没有独立窗口的系统标题栏与外框。
       await chrome.action.setPopup({ tabId: tab.id, popup: 'launcher.html' });
       launcherPopupAssigned = true;
+      console.warn('[Navigator] 打开面板: 启动器兜底');
       await chrome.action.openPopup({ windowId: tab.windowId });
       await new Promise((resolve) => setTimeout(resolve, 120));
       return;
@@ -827,8 +866,7 @@ async function injectSiteLauncher(tabId) {
 
 chrome.commands.onCommand.addListener(async (command, tab) => {
   if (command !== SITE_LAUNCHER_COMMAND) return;
-  const navigatorState = await chrome.storage.local.get(SITE_NAVIGATOR_ENABLED_KEY);
-  if (navigatorState[SITE_NAVIGATOR_ENABLED_KEY] !== true) return;
+  if (!(await isNavigatorEnabled())) return;
 
   let targetTab = tab;
   if (!Number.isInteger(targetTab?.id)) {
@@ -999,11 +1037,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     let shouldOpenPopup = false;
     Promise.all([
-      chrome.storage.local.get(SITE_NAVIGATOR_ENABLED_KEY),
+      isNavigatorEnabled(),
       chrome.storage.session.get(SITE_DISCOVERY_CANDIDATES_KEY)
     ])
-      .then(([navigatorState, stored]) => {
-        if (navigatorState[SITE_NAVIGATOR_ENABLED_KEY] !== true) return false;
+      .then(([enabled, stored]) => {
+        if (!enabled) return false;
         const candidates = stored[SITE_DISCOVERY_CANDIDATES_KEY] || {};
         shouldOpenPopup = candidates[tabId]?.hostname !== candidate.hostname;
         return chrome.storage.session.set({
@@ -1026,6 +1064,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         let popupOpened = false;
         if (shouldOpenPopup && Number.isInteger(sender.tab?.windowId)) {
           try {
+            console.warn('[Navigator] 打开面板: 网站发现, host=', candidate.hostname);
             await chrome.action.openPopup({ windowId: sender.tab.windowId });
             popupOpened = true;
           } catch (error) {
