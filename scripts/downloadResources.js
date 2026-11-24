@@ -9,7 +9,7 @@ function getUploadId(dom) {
     return null;
 }
 
-// 三种文件类型（PDF / PPTX&DOCX / MP4）统一下载方式：
+// PDF、Office 文档和 MP4 的下载方式：
 // 取 upload_id → 拼 /api/uploads/{id}/blob → <a download> 强制下载
 // isReference=true 时走 /api/uploads/reference/{id}/blob（视频用）
 function downloadBlob(id, fileName, isReference = false) {
@@ -94,13 +94,13 @@ function monitor() {
     });
 
     waitForElement('.file-previewer div.ng-scope[class*=container]', (parent_dom) => {
-        let fileExtension = document.querySelector('div.header span[ng-bind="upload.name|fileExtension"]').innerText;
+        const fileExtension = document.querySelector('div.header span[ng-bind="upload.name|fileExtension"]').innerText.trim().toLowerCase();
         let fileName = document.querySelector('div.header span[tipsy="upload.name"]').title;
         let a = document.createElement('a');
         a.innerHTML = '下载';
-        if (!['.pdf', '.mp4', '.pptx', '.docx'].includes(fileExtension)) return;
+        if (!['.pdf', '.ppt', '.pptx', '.docx', '.mp4'].includes(fileExtension)) return;
 
-        if (fileExtension === '.pdf' || fileExtension === '.pptx' || fileExtension === '.docx') {
+        if (fileExtension !== '.mp4') {
             waitForElement('#pdf-viewer', (element) => {
                 let id = getUploadId(element);
                 if (!id) return;
@@ -113,7 +113,7 @@ function monitor() {
                 }
             }, 'pdf')
         }
-        else if (fileExtension === '.mp4') {
+        else {
             waitForElement('video[id^=undefined]', (video) => {
                 function setupDownload() {
                     let src = video?.getAttribute('src') || video?.src || '';
